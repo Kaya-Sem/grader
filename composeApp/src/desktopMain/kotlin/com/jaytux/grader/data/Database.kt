@@ -10,7 +10,7 @@ object Database {
         transaction {
             SchemaUtils.create(
                 Courses, Editions, Groups,
-                Students, GroupStudents, SoloStudents,
+                Students, GroupStudents, EditionStudents,
                 GroupAssignments, SoloAssignments,
                 GroupFeedbacks, IndividualFeedbacks, SoloFeedbacks
             )

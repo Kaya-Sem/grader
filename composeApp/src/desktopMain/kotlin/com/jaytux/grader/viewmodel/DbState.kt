@@ -3,11 +3,10 @@ package com.jaytux.grader.viewmodel
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
-import com.jaytux.grader.data.Course
-import com.jaytux.grader.data.Edition
-import com.jaytux.grader.data.Editions
+import com.jaytux.grader.data.*
 import org.jetbrains.exposed.dao.Entity
 import org.jetbrains.exposed.sql.Transaction
+import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
@@ -36,8 +35,47 @@ class CourseListState {
         transaction { course.delete() }
         courses.refresh()
     }
+
+    fun getEditions(course: Course) = EditionListState(course)
 }
 
-class EditionListState(private val course: Course) {
+class EditionListState(val course: Course) {
     val editions = RawDbState { Edition.find { Editions.courseId eq course.id }.toList() }
+
+    fun new(name: String) {
+        transaction { Edition.new { this.name = name; this.course = this@EditionListState.course } }
+        editions.refresh()
+    }
+
+    fun delete(edition: Edition) {
+        transaction { edition.delete() }
+        editions.refresh()
+    }
+}
+
+class EditionState(val edition: Edition) {
+    val course = transaction { edition.course }
+    val students = RawDbState { edition.soloStudents.toList() }
+    val groups = RawDbState { edition.groups.toList() }
+    val groupAs = mutableStateOf(listOf<GroupAssignment>())
+    val solo = RawDbState { edition.soloAssignments.toList() }
+
+    fun newStudent(name: String, contact: String, note: String, addToEdition: Boolean) {
+        transaction {
+            val student = Student.new { this.name = name; this.contact = contact; this.note = note }
+            if(addToEdition) EditionStudents.insert {
+                it[editionId] = edition.id
+                it[studentId] = student.id
+            }
+        }
+
+        if(addToEdition) students.refresh()
+    }
+
+    fun newGroup(name: String) {
+        transaction {
+            Group.new { this.name = name; this.edition = this@EditionState.edition }
+            groups.refresh()
+        }
+    }
 }

@@ -21,7 +21,9 @@ class Edition(id: EntityID<UUID>) : Entity<UUID>(id) {
     var course by Course referencedOn Editions.courseId
     var name by Editions.name
     val groups by Group referrersOn Groups.editionId
-    val soloStudents by Student via SoloStudents
+    val soloStudents by Student via EditionStudents
+    val soloAssignments by SoloAssignment referrersOn SoloAssignments.editionId
+//    val groupAssignments by GroupAssignment referrersOn GroupAssignments.editionId
 }
 
 class Group(id: EntityID<UUID>) : Entity<UUID>(id) {
@@ -37,8 +39,9 @@ class Student(id: EntityID<UUID>) : Entity<UUID>(id) {
 
     var name by Students.name
     var note by Students.note
+    var contact by Students.contact
     val groups by Group via GroupStudents
-    val soloCourses by Edition via SoloStudents
+    val courses by Edition via EditionStudents
 }
 
 class GroupAssignment(id: EntityID<UUID>) : Entity<UUID>(id) {

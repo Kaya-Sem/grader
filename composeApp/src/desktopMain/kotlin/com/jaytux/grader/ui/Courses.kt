@@ -1,5 +1,6 @@
 package com.jaytux.grader.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,7 +10,6 @@ import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -20,12 +20,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.*
-import com.jaytux.grader.data.Course
+import androidx.compose.ui.window.DialogWindow
+import androidx.compose.ui.window.WindowPosition
+import androidx.compose.ui.window.rememberDialogState
+import com.jaytux.grader.UiRoute
+import com.jaytux.grader.data.Edition
 import com.jaytux.grader.viewmodel.CourseListState
+import com.jaytux.grader.viewmodel.EditionListState
+import com.jaytux.grader.viewmodel.EditionState
 
 @Composable
-fun CoursesView(state: CourseListState) {
+fun CoursesView(state: CourseListState, push: (UiRoute) -> Unit) {
     val data by state.courses.entities
     var showDialog by remember { mutableStateOf(false) }
 
@@ -41,7 +46,7 @@ fun CoursesView(state: CourseListState) {
     }
     else {
         LazyColumn(Modifier.fillMaxSize()) {
-            items(data) { CourseWidget(it) { state.delete(it) } }
+            items(data) { CourseWidget(state.getEditions(it), { state.delete(it) }, push) }
 
             item {
                 Button({ showDialog = true }, Modifier.fillMaxWidth()) {
@@ -51,45 +56,71 @@ fun CoursesView(state: CourseListState) {
         }
     }
 
-    if(showDialog) AddCourseDialog(data.map { it.name }, { showDialog = false }) { state.new(it) }
+    if(showDialog) AddStringDialog("Course name", data.map { it.name }, { showDialog = false }) { state.new(it) }
 }
 
 @Composable
-fun AddCourseDialog(taken: List<String>, onClose: () -> Unit, onSave: (String) -> Unit) = DialogWindow(
-    onCloseRequest = onClose,
-    state = rememberDialogState(size = DpSize(400.dp, 300.dp), position = WindowPosition(Alignment.Center))
-) {
-    Surface(Modifier.fillMaxSize().padding(10.dp)) {
-        Box(Modifier.fillMaxSize()) {
-            var name by remember { mutableStateOf("") }
-            Column(Modifier.align(Alignment.Center)) {
-                OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Course name") }, isError = name in taken)
-                Row {
-                    Button({ onClose() }, Modifier.weight(0.45f)) { Text("Cancel") }
-                    Spacer(Modifier.weight(0.1f))
-                    Button({ onSave(name); onClose() }, Modifier.weight(0.45f)) { Text("Save") }
-                }
-            }
+fun CourseWidget(state: EditionListState, onDelete: () -> Unit, push: (UiRoute) -> Unit) {
+    val editions by state.editions.entities
+    var isOpened by remember { mutableStateOf(false) }
+    var showDialog by remember { mutableStateOf(false) }
+
+    val callback = { it: Edition ->
+        val s = EditionState(it)
+        val route = UiRoute("${state.course.name}: ${it.name}") {
+            EditionView(s)
         }
+        push(route)
     }
-}
 
-@Composable
-fun CourseWidget(course: Course, onDelete: () -> Unit) {
-    val editions = remember(course) { course.loadEditions().size }
-    Surface(Modifier.fillMaxWidth().padding(horizontal = 5.dp, vertical = 10.dp), shape = MaterialTheme.shapes.medium, tonalElevation = 2.dp, shadowElevation = 2.dp) {
+    Surface(Modifier.fillMaxWidth().padding(horizontal = 5.dp, vertical = 10.dp).clickable { isOpened = !isOpened }, shape = MaterialTheme.shapes.medium, tonalElevation = 2.dp, shadowElevation = 2.dp) {
         Row {
-            Column(Modifier.weight(1f)) {
-                Text(course.name, Modifier.padding(5.dp), style = MaterialTheme.typography.headlineMedium)
+            Column(Modifier.weight(1f).padding(5.dp)) {
                 Row {
-                    Spacer(Modifier.width(15.dp))
-                    Text("$editions editions", fontStyle = FontStyle.Italic)
+                    Icon(
+                        if (isOpened) ChevronDown else ChevronRight, "Toggle editions",
+                        Modifier.size(MaterialTheme.typography.headlineMedium.fontSize.toDp())
+                            .align(Alignment.CenterVertically)
+                    )
+                    Column {
+                        Text(state.course.name, style = MaterialTheme.typography.headlineMedium)
+                    }
+                }
+                Row {
+                    Spacer(Modifier.width(25.dp))
+                    Text(
+                        "${editions.size} edition(s)",
+                        fontStyle = FontStyle.Italic,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                if(isOpened) {
+                    Row {
+                        Spacer(Modifier.width(25.dp))
+                        Column {
+                            editions.forEach { EditionWidget(it, { callback(it) }) { state.delete(it) } }
+                            Button({ showDialog = true }, Modifier.fillMaxWidth()) { Text("Add edition") }
+                        }
+                    }
                 }
             }
             Column {
                 IconButton({ onDelete() }) { Icon(Icons.Default.Delete, "Remove") }
-                IconButton({ TODO() }) { Icon(Icons.Default.Edit, "Edit") }
+                IconButton({ TODO() }, enabled = false) { Icon(Icons.Default.Edit, "Edit") }
             }
+        }
+    }
+
+    if(showDialog) AddStringDialog("Edition name", editions.map { it.name }, { showDialog = false }) { state.new(it) }
+}
+
+@Composable
+fun EditionWidget(edition: Edition, onOpen: () -> Unit, onDelete: () -> Unit) {
+    Surface(Modifier.fillMaxWidth().padding(horizontal = 5.dp, vertical = 10.dp).clickable { onOpen() }, shape = MaterialTheme.shapes.medium, tonalElevation = 2.dp, shadowElevation = 2.dp) {
+        Row(Modifier.padding(5.dp)) {
+            Text(edition.name, Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
+            IconButton({ onDelete() }) { Icon(Icons.Default.Delete, "Remove") }
         }
     }
 }

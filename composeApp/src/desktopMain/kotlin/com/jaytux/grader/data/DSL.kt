@@ -28,17 +28,19 @@ object Groups : UUIDTable("groups") {
 
 object Students : UUIDTable("students") {
     val name = varchar("name", 50)
+    val contact = varchar("contact", 50)
     val note = text("note")
 }
 
-object GroupStudents : Table("grpStudents") {
+object GroupStudents : CompositeIdTable("grpStudents") {
     val groupId = reference("group_id", Groups.id)
     val studentId = reference("student_id", Students.id)
+    val role = varchar("role", 50).nullable()
 
     override val primaryKey = PrimaryKey(groupId, studentId)
 }
 
-object SoloStudents : Table("soloStudents") {
+object EditionStudents : Table("editionStudents") {
     val editionId = reference("edition_id", Editions.id)
     val studentId = reference("student_id", Students.id)
 
@@ -46,15 +48,15 @@ object SoloStudents : Table("soloStudents") {
 }
 
 object GroupAssignments : UUIDTable("grpAssgmts") {
-    val editionId = reference("edition_id_", Editions.id)
-    val name = varchar("name_", 50)
-    val assignment = text("assignment_")
+    val editionId = reference("edition_id", Editions.id)
+    val name = varchar("name", 50)
+    val assignment = text("assignment")
 }
 
 object SoloAssignments : UUIDTable("soloAssgmts") {
-    val editionId = GroupAssignments.reference("edition_id", Editions.id)
-    val name = GroupAssignments.varchar("name", 50)
-    val assignment = GroupAssignments.text("assignment")
+    val editionId = reference("edition_id", Editions.id)
+    val name = varchar("name", 50)
+    val assignment = text("assignment")
 }
 
 object GroupFeedbacks : CompositeIdTable("grpFdbks") {
