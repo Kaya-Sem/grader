@@ -1,0 +1,29 @@
+[versions]
+androidx-lifecycle = "2.8.4"
+compose-multiplatform = "1.7.0"
+junit = "4.13.2"
+kotlin = "2.1.0"
+kotlinx-coroutines = "1.10.1"
+exposed = "0.59.0"
+material3 = "1.7.3"
+
+[libraries]
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-lifecycle-viewmodel = { group = "org.jetbrains.androidx.lifecycle", name = "lifecycle-viewmodel", version.ref = "androidx-lifecycle" }
+androidx-lifecycle-runtime-compose = { group = "org.jetbrains.androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
+kotlinx-coroutines-swing = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-swing", version.ref = "kotlinx-coroutines" }
+exposed-core = { group = "org.jetbrains.exposed", name = "exposed-core", version.ref = "exposed" }
+exposed-dao = { group = "org.jetbrains.exposed", name = "exposed-dao", version.ref = "exposed" }
+exposed-jdbc = { group = "org.jetbrains.exposed", name = "exposed-jdbc", version.ref = "exposed" }
+exposed-kotlin-datetime = { group = "org.jetbrains.exposed", name = "exposed-kotlin-datetime", version.ref = "exposed" }
+sqlite = { group = "org.xerial", name = "sqlite-jdbc", version = "3.34.0" }
+sl4j = { group = "org.slf4j", name = "slf4j-simple", version = "2.0.12" }
+material3-core = { group = "org.jetbrains.compose.material3", name = "material3", version.ref = "material3" }
+material3-desktop = { group = "org.jetbrains.compose.material3", name = "material3-desktop", version.ref = "material3" }
+
+[plugins]
+composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
+composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
