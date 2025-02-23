@@ -21,82 +21,126 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.rememberDialogState
 import com.jaytux.grader.data.*
 import com.jaytux.grader.viewmodel.EditionState
+import com.jaytux.grader.viewmodel.GroupAssignmentState
+import com.jaytux.grader.viewmodel.GroupState
+import com.jaytux.grader.viewmodel.StudentState
+
+enum class Panel { Student, Group, Solo, GroupAs }
+data class Current(val p: Panel, val i: Int)
+fun Current?.studentIdx() = this?.let { if(p == Panel.Student) i else null }
+fun Current?.groupIdx() = this?.let { if(p == Panel.Group) i else null }
+fun Current?.soloIdx() = this?.let { if(p == Panel.Solo) i else null }
+fun Current?.groupAsIdx() = this?.let { if(p == Panel.GroupAs) i else null }
 
 @Composable
-fun EditionView(state: EditionState) = Row {
+fun EditionView(state: EditionState) = Row(Modifier.padding(0.dp)) {
     var isGroup by remember { mutableStateOf(false) }
+    var idx by remember { mutableStateOf<Current?>(null) }
 
     val students by state.students.entities
     val groups by state.groups.entities
     val solo by state.solo.entities
-    val groupAs by state.groupAs//.entities
+    val groupAs by state.groupAs.entities
 
-    TabLayout(
-        listOf("Students", "Groups"),
-        if(isGroup) 1 else 0,
-        { isGroup = it == 1 },
-        { Text(it) },
-        Modifier.weight(0.25f)
-    ) {
-        Column(Modifier.fillMaxSize()) {
-            if(isGroup) {
-                Box(Modifier.weight(0.5f)) {
-                    GroupsWidget(state.course, state.edition, groups, {}) { state.newGroup(it) }
-                }
-                Box(Modifier.weight(0.5f)) { GroupAssignmentsWidget(groupAs, {}) {} }
-            }
-            else {
-                Box(Modifier.weight(0.5f)) {
-                    StudentsWidget(state.course, state.edition, students, {}) { name, note, contact, addToEdition ->
-                        state.newStudent(name, note, contact, addToEdition)
+    val toggle = { i: Int, p: Panel ->
+        idx = if(idx?.p == p && idx?.i == i) null else Current(p, i)
+    }
+
+
+    Surface(Modifier.weight(0.25f), tonalElevation = 5.dp) {
+        TabLayout(
+            listOf("Students", "Groups"),
+            if (isGroup) 1 else 0,
+            { isGroup = it == 1 },
+            { Text(it) }
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                if (isGroup) {
+                    Box(Modifier.weight(0.5f)) {
+                        GroupsWidget(
+                            state.course,
+                            state.edition,
+                            groups,
+                            idx.groupIdx(),
+                            { toggle(it, Panel.Group) }) {
+                            state.newGroup(it)
+                        }
+                    }
+                    Box(Modifier.weight(0.5f)) {
+                        GroupAssignmentsWidget(
+                            state.course, state.edition, groupAs, idx.groupAsIdx(), { toggle(it, Panel.GroupAs) }
+                        ) {
+                            state.newGroupAssignment(it)
+                        }
+                    }
+                } else {
+                    Box(Modifier.weight(0.5f)) {
+                        StudentsWidget(
+                            state.course, state.edition, students, idx.studentIdx(), { toggle(it, Panel.Student) }
+                        ) { name, note, contact, addToEdition ->
+                            state.newStudent(name, contact, note, addToEdition)
+                        }
+                    }
+                    Box(Modifier.weight(0.5f)) {
+                        AssignmentsWidget(
+                            state.course, state.edition, solo, idx.soloIdx(), { toggle(it, Panel.Solo) }
+                        ) {
+                            state.newSoloAssignment(it)
+                        }
                     }
                 }
-                Box(Modifier.weight(0.5f)) { AssignmentsWidget(solo, {}) {} }
             }
         }
     }
-    Box(Modifier.weight(0.75f)) {}
+    Box(Modifier.weight(0.75f)) {
+        idx?.let { i ->
+            when(i.p) {
+                Panel.Student -> StudentView(StudentState(students[i.i], state.edition))
+                Panel.Group -> GroupView(GroupState(groups[i.i]))
+                Panel.GroupAs -> GroupAssignmentView(GroupAssignmentState(groupAs[i.i]))
+                else -> {}
+            }
+        }
+    }
+}
+
+@Composable
+fun <T> EditionSideWidget(
+    course: Course, edition: Edition, header: String, hasNoX: String, addX: String,
+    data: List<T>, selected: Int?, onSelect: (Int) -> Unit,
+    singleWidget: @Composable (T) -> Unit,
+    dialog: @Composable (onExit: () -> Unit) -> Unit
+) = Column(Modifier.padding(10.dp)) {
+    Text(header, style = MaterialTheme.typography.headlineMedium)
+    var showDialog by remember { mutableStateOf(false) }
+
+    ListOrEmpty(
+        data,
+        { Text("Course ${course.name} (edition ${edition.name})\nhas no $hasNoX yet.", Modifier.align(Alignment.CenterHorizontally), textAlign = TextAlign.Center) },
+        { Text("Add $addX") },
+        { showDialog = true }
+    ) { idx, it ->
+        Surface(
+            Modifier.fillMaxWidth().clickable { onSelect(idx) },
+            tonalElevation = if (selected == idx) 50.dp else 0.dp,
+            shape = MaterialTheme.shapes.medium
+        ) {
+            singleWidget(it)
+        }
+    }
+
+    if(showDialog) dialog { showDialog = false }
 }
 
 @Composable
 fun StudentsWidget(
-    course: Course,
-    edition: Edition,
-    students: List<Student>,
-    onSelect: (Int) -> Unit,
+    course: Course, edition: Edition, students: List<Student>, selected: Int?, onSelect: (Int) -> Unit,
     onAdd: (name: String, note: String, contact: String, addToEdition: Boolean) -> Unit
-) = Column(Modifier.padding(10.dp)) {
-    Text("Student list", style = MaterialTheme.typography.headlineMedium)
-    var showDialog by remember { mutableStateOf(false) }
-    if(students.isEmpty()) {
-        Box(Modifier.fillMaxSize()) {
-            Column(Modifier.align(Alignment.Center)) {
-                Text(
-                    "Course ${course.name} (edition ${edition.name})\nhas no students yet.",
-                    Modifier.align(Alignment.CenterHorizontally),
-                    textAlign = TextAlign.Center
-                )
-                Button({ showDialog = true }, Modifier.align(Alignment.CenterHorizontally)) {
-                    Text("Add a student")
-                }
-            }
-        }
-    }
-    else {
-        LazyColumn(Modifier.padding(5.dp).weight(1f)) {
-            itemsIndexed(students) { idx, it ->
-                Surface(Modifier.fillMaxWidth().clickable { onSelect(idx) }) {
-                    Text(it.name, Modifier.padding(5.dp))
-                }
-            }
-        }
-
-        Button({ showDialog = true }, Modifier.fillMaxWidth()) {
-            Text("Add a student")
-        }
-    }
-
-    if(showDialog) StudentDialog(course, edition, { showDialog = false }, onAdd)
+) = EditionSideWidget(
+    course, edition, "Student list", "students", "a student", students, selected, onSelect,
+    { Text(it.name, Modifier.padding(5.dp)) }
+) { onExit ->
+    StudentDialog(course, edition, onExit, onAdd)
 }
 
 @Composable
@@ -135,52 +179,33 @@ fun StudentDialog(
 
 @Composable
 fun GroupsWidget(
-    course: Course,
-    edition: Edition,
-    groups: List<Group>,
-    onSelect: (Int) -> Unit,
+    course: Course, edition: Edition, groups: List<Group>, selected: Int?, onSelect: (Int) -> Unit,
     onAdd: (name: String) -> Unit
-) = Column(Modifier.padding(10.dp)) {
-    Text("Group list", style = MaterialTheme.typography.headlineMedium)
-    var showDialog by remember { mutableStateOf(false) }
-
-    if(groups.isEmpty()) {
-        Box(Modifier.fillMaxSize()) {
-            Column(Modifier.align(Alignment.Center)) {
-                Text(
-                    "Course ${course.name} (edition ${edition.name})\nhas no groups yet.",
-                    Modifier.align(Alignment.CenterHorizontally),
-                    textAlign = TextAlign.Center
-                )
-                Button({ showDialog = true }, Modifier.align(Alignment.CenterHorizontally)) {
-                    Text("Add a group")
-                }
-            }
-        }
-    }
-    else {
-        LazyColumn(Modifier.padding(5.dp).weight(1f)) {
-            itemsIndexed(groups) { idx, it ->
-                Surface(Modifier.fillMaxWidth().clickable { onSelect(idx) }) {
-                    Text(it.name, Modifier.padding(5.dp))
-                }
-            }
-        }
-
-        Button({ showDialog = true }, Modifier.fillMaxWidth()) {
-            Text("Add a group")
-        }
-    }
-
-    if(showDialog) AddStringDialog("Group name", groups.map { it.name }, { showDialog = false }) { onAdd(it) }
+) = EditionSideWidget(
+    course, edition, "Group list", "groups", "a group", groups, selected, onSelect,
+    { Text(it.name, Modifier.padding(5.dp)) }
+) { onExit ->
+    AddStringDialog("Group name", groups.map { it.name }, onExit) { onAdd(it) }
 }
 
 @Composable
-fun AssignmentsWidget(assignments: List<SoloAssignment>, onSelect: (Int) -> Unit, onAdd: (name: String) -> Unit) {
-    //
+fun AssignmentsWidget(
+    course: Course, edition: Edition, assignments: List<SoloAssignment>, selected: Int?,
+    onSelect: (Int) -> Unit, onAdd: (name: String) -> Unit
+) = EditionSideWidget(
+    course, edition, "Assignment list", "assignments", "an assignment", assignments, selected, onSelect,
+    { Text(it.name, Modifier.padding(5.dp)) }
+) { onExit ->
+    AddStringDialog("Assignment title", assignments.map { it.name }, onExit) { onAdd(it) }
 }
 
 @Composable
-fun GroupAssignmentsWidget(assignments: List<GroupAssignment>, onSelect: (Int) -> Unit, onAdd: (name: String) -> Unit) {
-    //
+fun GroupAssignmentsWidget(
+    course: Course, edition: Edition, assignments: List<GroupAssignment>, selected: Int?,
+    onSelect: (Int) -> Unit, onAdd: (name: String) -> Unit
+) = EditionSideWidget(
+    course, edition, "Group assignment list", "group assignments", "an assignment", assignments, selected, onSelect,
+    { Text(it.name, Modifier.padding(5.dp)) }
+) { onExit ->
+    AddStringDialog("Assignment title", assignments.map { it.name }, onExit) { onAdd(it) }
 }

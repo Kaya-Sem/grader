@@ -2,11 +2,8 @@ package com.jaytux.grader.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
-import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -18,11 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.DialogWindow
-import androidx.compose.ui.window.WindowPosition
-import androidx.compose.ui.window.rememberDialogState
 import com.jaytux.grader.UiRoute
 import com.jaytux.grader.data.Edition
 import com.jaytux.grader.viewmodel.CourseListState
@@ -34,26 +27,14 @@ fun CoursesView(state: CourseListState, push: (UiRoute) -> Unit) {
     val data by state.courses.entities
     var showDialog by remember { mutableStateOf(false) }
 
-    if(data.isEmpty()) {
-        Box(Modifier.fillMaxSize()) {
-            Column(Modifier.align(Alignment.Center)) {
-                Text("You have no courses yet.", Modifier.align(Alignment.CenterHorizontally))
-                Button({ showDialog = true }, Modifier.align(Alignment.CenterHorizontally)) {
-                    Text("Add a course")
-                }
-            }
-        }
-    }
-    else {
-        LazyColumn(Modifier.fillMaxSize()) {
-            items(data) { CourseWidget(state.getEditions(it), { state.delete(it) }, push) }
-
-            item {
-                Button({ showDialog = true }, Modifier.fillMaxWidth()) {
-                    Text("Add course")
-                }
-            }
-        }
+    ListOrEmpty(
+        data,
+        { Text("You have no courses yet.", Modifier.align(Alignment.CenterHorizontally)) },
+        { Text("Add a course") },
+        { showDialog = true },
+        addAfterLazy = false
+    ) { _, it ->
+        CourseWidget(state.getEditions(it), { state.delete(it) }, push)
     }
 
     if(showDialog) AddStringDialog("Course name", data.map { it.name }, { showDialog = false }) { state.new(it) }

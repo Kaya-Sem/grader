@@ -32,12 +32,14 @@ object Students : UUIDTable("students") {
     val note = text("note")
 }
 
-object GroupStudents : CompositeIdTable("grpStudents") {
+object GroupStudents : UUIDTable("grpStudents") {
     val groupId = reference("group_id", Groups.id)
     val studentId = reference("student_id", Students.id)
     val role = varchar("role", 50).nullable()
 
-    override val primaryKey = PrimaryKey(groupId, studentId)
+    init {
+        uniqueIndex(groupId, studentId) // can't figure out how to make this a composite key
+    }
 }
 
 object EditionStudents : Table("editionStudents") {

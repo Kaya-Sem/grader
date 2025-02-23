@@ -6,6 +6,8 @@ kotlin = "2.1.0"
 kotlinx-coroutines = "1.10.1"
 exposed = "0.59.0"
 material3 = "1.7.3"
+ui-android = "1.7.8"
+foundation-layout-android = "1.7.8"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -22,6 +24,8 @@ sqlite = { group = "org.xerial", name = "sqlite-jdbc", version = "3.34.0" }
 sl4j = { group = "org.slf4j", name = "slf4j-simple", version = "2.0.12" }
 material3-core = { group = "org.jetbrains.compose.material3", name = "material3", version.ref = "material3" }
 material3-desktop = { group = "org.jetbrains.compose.material3", name = "material3-desktop", version.ref = "material3" }
+androidx-ui-android = { group = "androidx.compose.ui", name = "ui-android", version.ref = "ui-android" }
+androidx-foundation-layout-android = { group = "androidx.compose.foundation", name = "foundation-layout-android", version.ref = "foundation-layout-android" }
 
 [plugins]
 composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }

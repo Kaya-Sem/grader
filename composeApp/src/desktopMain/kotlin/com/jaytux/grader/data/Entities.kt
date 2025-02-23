@@ -23,7 +23,7 @@ class Edition(id: EntityID<UUID>) : Entity<UUID>(id) {
     val groups by Group referrersOn Groups.editionId
     val soloStudents by Student via EditionStudents
     val soloAssignments by SoloAssignment referrersOn SoloAssignments.editionId
-//    val groupAssignments by GroupAssignment referrersOn GroupAssignments.editionId
+    val groupAssignments by GroupAssignment referrersOn GroupAssignments.editionId
 }
 
 class Group(id: EntityID<UUID>) : Entity<UUID>(id) {
@@ -32,6 +32,15 @@ class Group(id: EntityID<UUID>) : Entity<UUID>(id) {
     var edition by Edition referencedOn Groups.editionId
     var name by Groups.name
     val students by Student via GroupStudents
+    val studentRoles by GroupMember referrersOn GroupStudents.groupId
+}
+
+class GroupMember(id: EntityID<UUID>) : Entity<UUID>(id) {
+    companion object : EntityClass<UUID, GroupMember>(GroupStudents)
+
+    var student by Student referencedOn GroupStudents.studentId
+    var group by Group referencedOn GroupStudents.groupId
+    var role by GroupStudents.role
 }
 
 class Student(id: EntityID<UUID>) : Entity<UUID>(id) {

@@ -34,7 +34,7 @@ fun App() {
                 }
             }
             Surface(Modifier.fillMaxSize()) {
-                Box(Modifier.padding(10.dp)) {
+                Box {
                     stack.last().content { stack += (it) }
                 }
             }
