@@ -1,8 +1,10 @@
 package com.jaytux.grader.data
 
+import kotlinx.datetime.*
 import org.jetbrains.exposed.dao.id.CompositeIdTable
 import org.jetbrains.exposed.dao.id.UUIDTable
 import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.sql.kotlin.datetime.datetime
 
 object Courses : UUIDTable("courses") {
     val name = varchar("name", 50).uniqueIndex()
@@ -53,12 +55,14 @@ object GroupAssignments : UUIDTable("grpAssgmts") {
     val editionId = reference("edition_id", Editions.id)
     val name = varchar("name", 50)
     val assignment = text("assignment")
+    val deadline = datetime("deadline")
 }
 
 object SoloAssignments : UUIDTable("soloAssgmts") {
     val editionId = reference("edition_id", Editions.id)
     val name = varchar("name", 50)
     val assignment = text("assignment")
+    val deadline = datetime("deadline")
 }
 
 object GroupFeedbacks : CompositeIdTable("grpFdbks") {

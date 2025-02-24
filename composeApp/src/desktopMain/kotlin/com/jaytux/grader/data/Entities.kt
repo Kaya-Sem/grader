@@ -59,6 +59,7 @@ class GroupAssignment(id: EntityID<UUID>) : Entity<UUID>(id) {
     var edition by Edition referencedOn GroupAssignments.editionId
     var name by GroupAssignments.name
     var assignment by GroupAssignments.assignment
+    var deadline by GroupAssignments.deadline
 }
 
 class SoloAssignment(id: EntityID<UUID>) : Entity<UUID>(id) {
@@ -67,6 +68,7 @@ class SoloAssignment(id: EntityID<UUID>) : Entity<UUID>(id) {
     var edition by Edition referencedOn SoloAssignments.editionId
     var name by SoloAssignments.name
     var assignment by SoloAssignments.assignment
+    var deadline by SoloAssignments.deadline
 }
 
 class GroupFeedback(id: EntityID<CompositeID>) : Entity<CompositeID>(id) {

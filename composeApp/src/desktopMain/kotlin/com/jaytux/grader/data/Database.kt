@@ -14,6 +14,14 @@ object Database {
                 GroupAssignments, SoloAssignments,
                 GroupFeedbacks, IndividualFeedbacks, SoloFeedbacks
             )
+
+            val addMissing = SchemaUtils.addMissingColumnsStatements(
+                Courses, Editions, Groups,
+                Students, GroupStudents, EditionStudents,
+                GroupAssignments, SoloAssignments,
+                GroupFeedbacks, IndividualFeedbacks, SoloFeedbacks
+            )
+            addMissing.forEach { exec(it) }
         }
         actual
     }

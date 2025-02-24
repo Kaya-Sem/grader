@@ -67,8 +67,8 @@ fun AddStringDialog(label: String, taken: List<String>, onClose: () -> Unit, onS
     onCloseRequest = onClose,
     state = rememberDialogState(size = DpSize(400.dp, 300.dp), position = WindowPosition(Alignment.Center))
 ) {
-    Surface(Modifier.fillMaxSize().padding(10.dp)) {
-        Box(Modifier.fillMaxSize()) {
+    Surface(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().padding(10.dp)) {
             var name by remember { mutableStateOf("") }
             Column(Modifier.align(Alignment.Center)) {
                 androidx.compose.material.OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text(label) }, isError = name in taken)

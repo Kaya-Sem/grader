@@ -4,11 +4,18 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import com.jaytux.grader.data.*
+import com.jaytux.grader.data.EditionStudents.editionId
+import com.jaytux.grader.data.EditionStudents.studentId
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 
 fun <T> MutableState<T>.immutable(): State<T> = this
+fun <T> SizedIterable<T>.sortAsc(vararg columns: Expression<*>) = this.orderBy(*(columns.map { it to SortOrder.ASC }.toTypedArray()))
 
 class RawDbState<T: Any>(private val loader: (Transaction.() -> List<T>)) {
 
@@ -23,7 +30,7 @@ class RawDbState<T: Any>(private val loader: (Transaction.() -> List<T>)) {
 }
 
 class CourseListState {
-    val courses = RawDbState { Course.all().toList() }
+    val courses = RawDbState { Course.all().sortAsc(Courses.name).toList() }
 
     fun new(name: String) {
         transaction { Course.new { this.name = name } }
@@ -39,7 +46,7 @@ class CourseListState {
 }
 
 class EditionListState(val course: Course) {
-    val editions = RawDbState { Edition.find { Editions.courseId eq course.id }.toList() }
+    val editions = RawDbState { Edition.find { Editions.courseId eq course.id }.sortAsc(Editions.name).toList() }
 
     fun new(name: String) {
         transaction { Edition.new { this.name = name; this.course = this@EditionListState.course } }
@@ -54,10 +61,16 @@ class EditionListState(val course: Course) {
 
 class EditionState(val edition: Edition) {
     val course = transaction { edition.course }
-    val students = RawDbState { edition.soloStudents.toList() }
-    val groups = RawDbState { edition.groups.toList() }
-    val solo = RawDbState { edition.soloAssignments.toList() }
-    val groupAs = RawDbState { edition.groupAssignments.toList() }
+    val students = RawDbState { edition.soloStudents.sortAsc(Students.name).toList() }
+    val groups = RawDbState { edition.groups.sortAsc(Groups.name).toList() }
+    val solo = RawDbState { edition.soloAssignments.sortAsc(SoloAssignments.name).toList() }
+    val groupAs = RawDbState { edition.groupAssignments.sortAsc(GroupAssignments.name).toList() }
+
+    val availableStudents = RawDbState {
+        Student.find {
+            (Students.id notInList edition.soloStudents.map { it.id })
+        }.toList()
+    }
 
     fun newStudent(name: String, contact: String, note: String, addToEdition: Boolean) {
         transaction {
@@ -69,6 +82,18 @@ class EditionState(val edition: Edition) {
         }
 
         if(addToEdition) students.refresh()
+        else availableStudents.refresh()
+    }
+
+    fun addToCourse(students: List<Student>) {
+        transaction {
+            EditionStudents.batchInsert(students) {
+                this[editionId] = edition.id
+                this[studentId] = it.id
+            }
+        }
+        availableStudents.refresh();
+        this.students.refresh()
     }
 
     fun newGroup(name: String) {
@@ -94,8 +119,10 @@ class EditionState(val edition: Edition) {
 
 class StudentState(val student: Student, edition: Edition) {
     val editionCourse = transaction { edition.course to edition }
-    val groups = RawDbState { student.groups.map { it to (it.edition.course.name to it.edition.name) }.toList() }
-    val courseEditions = RawDbState { student.courses.map{ it to it.course }.toList() }
+    val groups = RawDbState { student.groups.sortAsc(Groups.name).map { it to (it.edition.course.name to it.edition.name) }.toList() }
+    val courseEditions = RawDbState { student.courses.map{ it to it.course }.sortedWith {
+        (e1, c1), (e2, c2) -> c1.name.compareTo(c2.name).let { if(it == 0) e1.name.compareTo(e2.name) else it }
+    }.toList() }
 
     fun update(f: Student.() -> Unit) {
         transaction {
@@ -105,17 +132,17 @@ class StudentState(val student: Student, edition: Edition) {
 }
 
 class GroupState(val group: Group) {
-    val members = RawDbState { group.studentRoles.map{ it.student to it.role }.toList() }
+    val members = RawDbState { group.studentRoles.map{ it.student to it.role }.sortedBy { it.first.name }.toList() }
     val availableStudents = RawDbState { Student.find {
         // not yet in the group
         (Students.id notInList group.students.map { it.id }) and
         // but in the same course (edition)
         (Students.id inList group.edition.soloStudents.map { it.id })
-    }.toList() }
+    }.sortAsc(Students.name).toList() }
     val course = transaction { group.edition.course to group.edition }
     val roles = RawDbState {
         GroupStudents.select(GroupStudents.role).where{ GroupStudents.role.isNotNull() }
-            .withDistinct(true).map{ it[GroupStudents.role] ?: "" }.toList()
+            .withDistinct(true).sortAsc(GroupStudents.role).map{ it[GroupStudents.role] ?: "" }.toList()
     }
 
     fun addStudent(student: Student) {
@@ -151,24 +178,25 @@ class GroupAssignmentState(val assignment: GroupAssignment) {
     data class LocalGFeedback(
         val group: Group,
         val feedback: LocalFeedback?,
-        val individuals: Map<Student, Pair<String?, LocalFeedback?>>
+        val individuals: List<Pair<Student, Pair<String?, LocalFeedback?>>>
     )
 
     val editionCourse = transaction { assignment.edition.course to assignment.edition }
     private val _name = mutableStateOf(assignment.name); val name = _name.immutable()
     private val _task = mutableStateOf(assignment.assignment); val task = _task.immutable()
     val feedback = RawDbState { loadFeedback() }
+    private val _deadline = mutableStateOf(assignment.deadline); val deadline = _deadline.immutable()
 
     val autofill = RawDbState {
         val forGroups = GroupFeedbacks.selectAll().where { GroupFeedbacks.groupAssignmentId eq assignment.id }.flatMap {
             it[GroupFeedbacks.feedback].split('\n')
-        }.toList()
+        }
 
         val forIndividuals = IndividualFeedbacks.selectAll().where { IndividualFeedbacks.groupAssignmentId eq assignment.id }.flatMap {
             it[IndividualFeedbacks.feedback].split('\n')
-        }.toList()
+        }
 
-        (forGroups + forIndividuals).distinct()
+        (forGroups + forIndividuals).distinct().sorted()
     }
 
     private fun Transaction.loadFeedback(): List<Pair<Group, LocalGFeedback>> {
@@ -186,8 +214,8 @@ class GroupAssignmentState(val assignment: GroupAssignment) {
 
         val groups = Group.find {
             (Groups.editionId eq assignment.edition.id)
-        }.map { group ->
-            val students = group.studentRoles.associate { sR ->
+        }.sortAsc(Groups.name).map { group ->
+            val students = group.studentRoles.sortedBy { it.student.name }.map { sR ->
                 val student = sR.student
                 val role = sR.role
                 val feedback = individuals[student.id]
@@ -233,6 +261,14 @@ class GroupAssignmentState(val assignment: GroupAssignment) {
             assignment.assignment = t
         }
         _task.value = t
+    }
+
+    fun updateDeadline(instant: Long) {
+        val d = Instant.fromEpochMilliseconds(instant).toLocalDateTime(TimeZone.currentSystemDefault())
+        transaction {
+            assignment.deadline = d
+        }
+        _deadline.value = d
     }
 }
 

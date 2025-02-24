@@ -4,13 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.Checkbox
-import androidx.compose.material.OutlinedTextField
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -41,6 +36,7 @@ fun EditionView(state: EditionState) = Row(Modifier.padding(0.dp)) {
     val groups by state.groups.entities
     val solo by state.solo.entities
     val groupAs by state.groupAs.entities
+    val available by state.availableStudents.entities
 
     val toggle = { i: Int, p: Panel ->
         idx = if(idx?.p == p && idx?.i == i) null else Current(p, i)
@@ -76,7 +72,8 @@ fun EditionView(state: EditionState) = Row(Modifier.padding(0.dp)) {
                 } else {
                     Box(Modifier.weight(0.5f)) {
                         StudentsWidget(
-                            state.course, state.edition, students, idx.studentIdx(), { toggle(it, Panel.Student) }
+                            state.course, state.edition, students, idx.studentIdx(), { toggle(it, Panel.Student) },
+                            available, { state.addToCourse(it) }
                         ) { name, note, contact, addToEdition ->
                             state.newStudent(name, contact, note, addToEdition)
                         }
@@ -135,12 +132,13 @@ fun <T> EditionSideWidget(
 @Composable
 fun StudentsWidget(
     course: Course, edition: Edition, students: List<Student>, selected: Int?, onSelect: (Int) -> Unit,
+    availableStudents: List<Student>, onImport: (List<Student>) -> Unit,
     onAdd: (name: String, note: String, contact: String, addToEdition: Boolean) -> Unit
 ) = EditionSideWidget(
     course, edition, "Student list", "students", "a student", students, selected, onSelect,
     { Text(it.name, Modifier.padding(5.dp)) }
 ) { onExit ->
-    StudentDialog(course, edition, onExit, onAdd)
+    StudentDialog(course, edition, onExit, availableStudents, onImport, onAdd)
 }
 
 @Composable
@@ -148,29 +146,93 @@ fun StudentDialog(
     course: Course,
     edition: Edition,
     onClose: () -> Unit,
+    availableStudents: List<Student>,
+    onImport: (List<Student>) -> Unit,
     onAdd: (name: String, note: String, contact: String, addToEdition: Boolean) -> Unit
 ) = DialogWindow(
     onCloseRequest = onClose,
     state = rememberDialogState(size = DpSize(600.dp, 400.dp), position = WindowPosition(Alignment.Center))
 ) {
-    Surface(Modifier.fillMaxSize().padding(10.dp)) {
-        Box(Modifier.fillMaxSize()) {
-            var name by remember { mutableStateOf("") }
-            var contact by remember { mutableStateOf("") }
-            var note by remember { mutableStateOf("") }
-            var add by remember { mutableStateOf(true) }
+    Surface(Modifier.fillMaxSize()) {
+        Column(Modifier.padding(10.dp)) {
+            var isImport by remember { mutableStateOf(false) }
+            TabRow(if(isImport) 1 else 0) {
+                Tab(!isImport, { isImport = false }) { Text("Add new student") }
+                Tab(isImport, { isImport = true }) { Text("Add existing student") }
+            }
 
-            Column(Modifier.align(Alignment.Center)) {
-                OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Student name") })
-                OutlinedTextField(contact, { contact = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Student contact") })
-                OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth(), singleLine = false, minLines = 3, label = { Text("Note") })
-                Row {
-                    Checkbox(add, { add = it })
-                    Text("Add student to ${course.name} ${edition.name}?", Modifier.align(Alignment.CenterVertically))
+            if(isImport) {
+                if(availableStudents.isEmpty()) {
+                    Box(Modifier.fillMaxSize()) {
+                        Text("No students available to add to this course.", Modifier.align(Alignment.Center))
+                    }
                 }
-                CancelSaveRow(name.isNotBlank() && contact.isNotBlank(), onClose) {
-                    onAdd(name, note, contact, add)
-                    onClose()
+                else {
+                    var selected by remember { mutableStateOf(setOf<Int>()) }
+
+                    val onClick = { idx: Int ->
+                        selected = if(idx in selected) selected - idx else selected + idx
+                    }
+
+                    Text("Select students to add to ${course.name} ${edition.name}")
+                    LazyColumn {
+                        itemsIndexed(availableStudents) { idx, student ->
+                            Surface(
+                                Modifier.fillMaxWidth().clickable { onClick(idx) },
+                                tonalElevation = if (selected.contains(idx)) 5.dp else 0.dp
+                            ) {
+                                Row {
+                                    Checkbox(selected.contains(idx), { onClick(idx) })
+                                    Text(student.name, Modifier.padding(5.dp))
+                                }
+                            }
+                        }
+                    }
+                    CancelSaveRow(selected.isNotEmpty(), onClose) {
+                        onImport(selected.map { idx -> availableStudents[idx] })
+                        onClose()
+                    }
+                }
+            }
+            else {
+                Box(Modifier.fillMaxSize()) {
+                    var name by remember { mutableStateOf("") }
+                    var contact by remember { mutableStateOf("") }
+                    var note by remember { mutableStateOf("") }
+                    var add by remember { mutableStateOf(true) }
+
+                    Column(Modifier.align(Alignment.Center)) {
+                        OutlinedTextField(
+                            name,
+                            { name = it },
+                            Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text("Student name") })
+                        OutlinedTextField(
+                            contact,
+                            { contact = it },
+                            Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text("Student contact") })
+                        OutlinedTextField(
+                            note,
+                            { note = it },
+                            Modifier.fillMaxWidth(),
+                            singleLine = false,
+                            minLines = 3,
+                            label = { Text("Note") })
+                        Row {
+                            Checkbox(add, { add = it })
+                            Text(
+                                "Add student to ${course.name} ${edition.name}?",
+                                Modifier.align(Alignment.CenterVertically)
+                            )
+                        }
+                        CancelSaveRow(name.isNotBlank() && contact.isNotBlank(), onClose) {
+                            onAdd(name, note, contact, add)
+                            onClose()
+                        }
+                    }
                 }
             }
         }

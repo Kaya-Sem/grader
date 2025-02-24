@@ -4,7 +4,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.OutlinedTextField
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -13,13 +12,20 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import com.jaytux.grader.viewmodel.GroupAssignmentState
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.format
+import kotlinx.datetime.format.FormatStringsInDatetimeFormats
+import kotlinx.datetime.format.byUnicodePattern
 
+@OptIn(ExperimentalMaterial3Api::class, FormatStringsInDatetimeFormats::class)
 @Composable
 fun GroupAssignmentView(state: GroupAssignmentState) {
     val (course, edition) = state.editionCourse
     val name by state.name
     val task by state.task
+    val deadline by state.deadline
     val allFeedback by state.feedback.entities
 
     var idx by remember { mutableStateOf(0) }
@@ -45,11 +51,34 @@ fun GroupAssignmentView(state: GroupAssignmentState) {
 
         if(idx == 0) {
             var updTask by remember { mutableStateOf(task) }
+            Row {
+                var showPicker by remember { mutableStateOf(false) }
+                val dateState = rememberDatePickerState()
+
+                Text("Deadline: ${deadline.format(LocalDateTime.Format { byUnicodePattern("dd/MM/yyyy - HH:mm") })}", Modifier.align(Alignment.CenterVertically))
+                Spacer(Modifier.width(10.dp))
+                Button({ showPicker = true }) { Text("Change") }
+
+                if(showPicker) DatePickerDialog(
+                    { showPicker = false },
+                    { Button({ showPicker = false; dateState.selectedDateMillis?.let { state.updateDeadline(it) } }) { Text("Set deadline") } },
+                    Modifier,
+                    { Button({ showPicker = false }) { Text("Cancel") } },
+                    shape = MaterialTheme.shapes.medium,
+                    tonalElevation = 10.dp,
+                    colors = DatePickerDefaults.colors(),
+                    properties = DialogProperties()
+                ) {
+                    DatePicker(
+                        dateState,
+                        Modifier.fillMaxWidth().padding(10.dp),
+                    )
+                }
+            }
             OutlinedTextField(updTask, { updTask = it }, Modifier.fillMaxWidth().weight(1f), singleLine = false, minLines = 5, label = { Text("Task") })
             CancelSaveRow(updTask != task, { updTask = task }, "Reset", "Update") { state.updateTask(updTask) }
         }
         else {
-            val (group, feedback, individual) = allFeedback[idx - 1].second
             groupFeedback(state, allFeedback[idx - 1].second)
         }
     }
@@ -108,7 +137,24 @@ fun groupFeedback(state: GroupAssignmentState, fdbk: GroupAssignmentState.LocalG
                 }
             }
             else {
-                //
+                val (student, details) = individual[idx - 1]
+                var sGrade by remember { mutableStateOf(details.second?.grade ?: "") }
+                var sMsg by remember { mutableStateOf(TextFieldValue(details.second?.feedback ?: "")) }
+                Row {
+                    Text("Grade: ", Modifier.align(Alignment.CenterVertically))
+                    OutlinedTextField(sGrade, { sGrade = it }, Modifier.weight(0.2f))
+                    Spacer(Modifier.weight(0.6f))
+                    Button({ state.upsertIndividualFeedback(student, group, sMsg.text, sGrade) }, Modifier.weight(0.2f).align(Alignment.CenterVertically),
+                        enabled = sGrade.isNotBlank() || sMsg.text.isNotBlank()) {
+                        Text("Save")
+                    }
+                }
+
+                AutocompleteLineField(
+                    sMsg, { sMsg = it }, Modifier.fillMaxWidth().weight(1f), { Text("Feedback") }
+                ) { filter ->
+                    suggestions.filter { x -> x.trim().startsWith(filter.trim()) }
+                }
             }
         }
     }
