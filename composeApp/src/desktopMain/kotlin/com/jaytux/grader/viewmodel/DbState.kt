@@ -6,13 +6,13 @@ import androidx.compose.runtime.mutableStateOf
 import com.jaytux.grader.data.*
 import com.jaytux.grader.data.EditionStudents.editionId
 import com.jaytux.grader.data.EditionStudents.studentId
-import kotlinx.datetime.Instant
-import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.*
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
+import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.util.*
 
 fun <T> MutableState<T>.immutable(): State<T> = this
 fun <T> SizedIterable<T>.sortAsc(vararg columns: Expression<*>) = this.orderBy(*(columns.map { it to SortOrder.ASC }.toTypedArray()))
@@ -102,27 +102,91 @@ class EditionState(val edition: Edition) {
             groups.refresh()
         }
     }
+    fun setGroupName(group: Group, name: String) {
+        transaction {
+            group.name = name
+        }
+        groups.refresh()
+    }
+
+    private fun now(): LocalDateTime {
+        val instant = Instant.fromEpochMilliseconds(System.currentTimeMillis())
+        return instant.toLocalDateTime(TimeZone.currentSystemDefault())
+    }
 
     fun newSoloAssignment(name: String) {
         transaction {
-            SoloAssignment.new { this.name = name; this.edition = this@EditionState.edition; assignment = "" }
+            SoloAssignment.new { this.name = name; this.edition = this@EditionState.edition; assignment = ""; deadline = now() }
             solo.refresh()
         }
     }
+    fun setSoloAssignmentTitle(assignment: SoloAssignment, title: String) {
+        transaction {
+            assignment.name = title
+        }
+        solo.refresh()
+    }
     fun newGroupAssignment(name: String) {
         transaction {
-            GroupAssignment.new { this.name = name; this.edition = this@EditionState.edition; assignment = "" }
+            GroupAssignment.new { this.name = name; this.edition = this@EditionState.edition; assignment = ""; deadline = now() }
             groupAs.refresh()
         }
+    }
+    fun setGroupAssignmentTitle(assignment: GroupAssignment, title: String) {
+        transaction {
+            assignment.name = title
+        }
+        groupAs.refresh()
     }
 }
 
 class StudentState(val student: Student, edition: Edition) {
+    data class LocalGroupGrade(val groupName: String, val assignmentName: String, val groupGrade: String?, val indivGrade: String?)
+    data class LocalSoloGrade(val assignmentName: String, val grade: String)
+
     val editionCourse = transaction { edition.course to edition }
     val groups = RawDbState { student.groups.sortAsc(Groups.name).map { it to (it.edition.course.name to it.edition.name) }.toList() }
     val courseEditions = RawDbState { student.courses.map{ it to it.course }.sortedWith {
         (e1, c1), (e2, c2) -> c1.name.compareTo(c2.name).let { if(it == 0) e1.name.compareTo(e2.name) else it }
     }.toList() }
+
+    val groupGrades = RawDbState {
+        val groupsForEdition = Group.find {
+            (Groups.editionId eq edition.id) and (Groups.id inList student.groups.map { it.id })
+        }.associate { it.id to it.name }
+
+        val asGroup = (GroupAssignments innerJoin GroupFeedbacks innerJoin Groups).selectAll().where {
+            GroupFeedbacks.groupId inList groupsForEdition.keys.toList()
+        }.map { it[GroupFeedbacks.groupAssignmentId] to it }
+
+        val asIndividual = (GroupAssignments innerJoin IndividualFeedbacks innerJoin Groups).selectAll().where {
+            IndividualFeedbacks.studentId eq student.id
+        }.map { it[IndividualFeedbacks.groupAssignmentId] to it }
+
+        val res = mutableMapOf<EntityID<UUID>, LocalGroupGrade>()
+        asGroup.forEach {
+            val (gAId, gRow) = it
+
+            res[gAId] = LocalGroupGrade(
+                gRow[Groups.name], gRow[GroupAssignments.name], gRow[GroupFeedbacks.grade], null
+            )
+        }
+
+        asIndividual.forEach {
+            val (gAId, iRow) = it
+
+            val og = res[gAId] ?: LocalGroupGrade(iRow[Groups.name], iRow[GroupAssignments.name], null, null)
+            res[gAId] = og.copy(indivGrade = iRow[IndividualFeedbacks.grade])
+        }
+
+        res.values.toList()
+    }
+
+    val soloGrades = RawDbState {
+        (SoloAssignments innerJoin SoloFeedbacks).selectAll().where {
+            SoloFeedbacks.studentId eq student.id
+        }.map { LocalSoloGrade(it[SoloAssignments.name], it[SoloFeedbacks.grade]) }.toList()
+    }
 
     fun update(f: Student.() -> Unit) {
         transaction {
@@ -263,8 +327,7 @@ class GroupAssignmentState(val assignment: GroupAssignment) {
         _task.value = t
     }
 
-    fun updateDeadline(instant: Long) {
-        val d = Instant.fromEpochMilliseconds(instant).toLocalDateTime(TimeZone.currentSystemDefault())
+    fun updateDeadline(d: LocalDateTime) {
         transaction {
             assignment.deadline = d
         }

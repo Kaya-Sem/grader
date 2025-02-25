@@ -22,6 +22,7 @@ kotlin {
             implementation(libs.androidx.lifecycle.viewmodel)
             implementation(libs.androidx.lifecycle.runtime.compose)
             implementation(libs.material3.core)
+            implementation(libs.material.icons)
             implementation(libs.sl4j)
         }
         desktopMain.dependencies {
@@ -33,6 +34,7 @@ kotlin {
             implementation(libs.exposed.kotlin.datetime)
             implementation(libs.sqlite)
             implementation(libs.material3.desktop)
+            implementation(libs.rtfield)
         }
     }
 }

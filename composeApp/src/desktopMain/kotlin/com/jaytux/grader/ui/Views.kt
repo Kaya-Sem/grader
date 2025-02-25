@@ -23,6 +23,10 @@ import com.jaytux.grader.viewmodel.StudentState
 fun StudentView(state: StudentState) {
     val groups by state.groups.entities
     val courses by state.courseEditions.entities
+    val groupGrades by state.groupGrades.entities
+    val soloGrades by state.soloGrades.entities
+
+    // TODO: incorporate grades into UI
 
     Column(Modifier.padding(10.dp)) {
         PaneHeader(state.student.name, "student", state.editionCourse)

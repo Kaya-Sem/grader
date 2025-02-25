@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -58,15 +60,19 @@ fun EditionView(state: EditionState) = Row(Modifier.padding(0.dp)) {
                             state.edition,
                             groups,
                             idx.groupIdx(),
-                            { toggle(it, Panel.Group) }) {
-                            state.newGroup(it)
+                            { toggle(it, Panel.Group) },
+                            { state.newGroup(it) }) { group, name ->
+                            state.setGroupName(group, name)
                         }
                     }
                     Box(Modifier.weight(0.5f)) {
                         GroupAssignmentsWidget(
-                            state.course, state.edition, groupAs, idx.groupAsIdx(), { toggle(it, Panel.GroupAs) }
-                        ) {
-                            state.newGroupAssignment(it)
+                            state.course, state.edition, groupAs, idx.groupAsIdx(), { toggle(it, Panel.GroupAs) },
+                            { state.newGroupAssignment(it) }) { assignment, title ->
+                            state.setGroupAssignmentTitle(
+                                assignment,
+                                title
+                            )
                         }
                     }
                 } else {
@@ -80,9 +86,13 @@ fun EditionView(state: EditionState) = Row(Modifier.padding(0.dp)) {
                     }
                     Box(Modifier.weight(0.5f)) {
                         AssignmentsWidget(
-                            state.course, state.edition, solo, idx.soloIdx(), { toggle(it, Panel.Solo) }
-                        ) {
-                            state.newSoloAssignment(it)
+                            state.course,
+                            state.edition,
+                            solo,
+                            idx.soloIdx(),
+                            { toggle(it, Panel.Solo) },
+                            { state.newSoloAssignment(it) }) { assignment, title ->
+                            state.setSoloAssignmentTitle(assignment, title)
                         }
                     }
                 }
@@ -106,10 +116,12 @@ fun <T> EditionSideWidget(
     course: Course, edition: Edition, header: String, hasNoX: String, addX: String,
     data: List<T>, selected: Int?, onSelect: (Int) -> Unit,
     singleWidget: @Composable (T) -> Unit,
+    editDialog: @Composable ((current: T, onExit: () -> Unit) -> Unit)? = null,
     dialog: @Composable (onExit: () -> Unit) -> Unit
 ) = Column(Modifier.padding(10.dp)) {
     Text(header, style = MaterialTheme.typography.headlineMedium)
     var showDialog by remember { mutableStateOf(false) }
+    var current by remember { mutableStateOf<T?>(null) }
 
     ListOrEmpty(
         data,
@@ -122,11 +134,23 @@ fun <T> EditionSideWidget(
             tonalElevation = if (selected == idx) 50.dp else 0.dp,
             shape = MaterialTheme.shapes.medium
         ) {
-            singleWidget(it)
+            Row {
+                Box(Modifier.weight(1f).align(Alignment.CenterVertically)) { singleWidget(it) }
+                editDialog?.let { _ ->
+                    IconButton({ current = it }, Modifier.align(Alignment.CenterVertically)) {
+                        Icon(Icons.Default.Edit, "Edit")
+                    }
+                }
+            }
         }
     }
 
     if(showDialog) dialog { showDialog = false }
+    editDialog?.let { d ->
+        current?.let { c ->
+            d(c) { current = null }
+        }
+    }
 }
 
 @Composable
@@ -135,7 +159,7 @@ fun StudentsWidget(
     availableStudents: List<Student>, onImport: (List<Student>) -> Unit,
     onAdd: (name: String, note: String, contact: String, addToEdition: Boolean) -> Unit
 ) = EditionSideWidget(
-    course, edition, "Student list", "students", "a student", students, selected, onSelect,
+    course, edition, "Student list (${students.size})", "students", "a student", students, selected, onSelect,
     { Text(it.name, Modifier.padding(5.dp)) }
 ) { onExit ->
     StudentDialog(course, edition, onExit, availableStudents, onImport, onAdd)
@@ -242,10 +266,11 @@ fun StudentDialog(
 @Composable
 fun GroupsWidget(
     course: Course, edition: Edition, groups: List<Group>, selected: Int?, onSelect: (Int) -> Unit,
-    onAdd: (name: String) -> Unit
+    onAdd: (name: String) -> Unit, onUpdate: (Group, String) -> Unit
 ) = EditionSideWidget(
-    course, edition, "Group list", "groups", "a group", groups, selected, onSelect,
-    { Text(it.name, Modifier.padding(5.dp)) }
+    course, edition, "Group list (${groups.size})", "groups", "a group", groups, selected, onSelect,
+    { Text(it.name, Modifier.padding(5.dp)) },
+    { current, onExit -> AddStringDialog("Group name", groups.map { it.name }, onExit, current.name) { onUpdate(current, it) } }
 ) { onExit ->
     AddStringDialog("Group name", groups.map { it.name }, onExit) { onAdd(it) }
 }
@@ -253,10 +278,11 @@ fun GroupsWidget(
 @Composable
 fun AssignmentsWidget(
     course: Course, edition: Edition, assignments: List<SoloAssignment>, selected: Int?,
-    onSelect: (Int) -> Unit, onAdd: (name: String) -> Unit
+    onSelect: (Int) -> Unit, onAdd: (name: String) -> Unit, onUpdate: (SoloAssignment, String) -> Unit
 ) = EditionSideWidget(
     course, edition, "Assignment list", "assignments", "an assignment", assignments, selected, onSelect,
-    { Text(it.name, Modifier.padding(5.dp)) }
+    { Text(it.name, Modifier.padding(5.dp)) },
+    { current, onExit -> AddStringDialog("Assignment title", assignments.map { it.name }, onExit, current.name) { onUpdate(current, it) } }
 ) { onExit ->
     AddStringDialog("Assignment title", assignments.map { it.name }, onExit) { onAdd(it) }
 }
@@ -264,10 +290,11 @@ fun AssignmentsWidget(
 @Composable
 fun GroupAssignmentsWidget(
     course: Course, edition: Edition, assignments: List<GroupAssignment>, selected: Int?,
-    onSelect: (Int) -> Unit, onAdd: (name: String) -> Unit
+    onSelect: (Int) -> Unit, onAdd: (name: String) -> Unit, onUpdate: (GroupAssignment, String) -> Unit
 ) = EditionSideWidget(
     course, edition, "Group assignment list", "group assignments", "an assignment", assignments, selected, onSelect,
-    { Text(it.name, Modifier.padding(5.dp)) }
+    { Text(it.name, Modifier.padding(5.dp)) },
+    { current, onExit -> AddStringDialog("Assignment title", assignments.map { it.name }, onExit, current.name) { onUpdate(current, it) } }
 ) { onExit ->
     AddStringDialog("Assignment title", assignments.map { it.name }, onExit) { onAdd(it) }
 }

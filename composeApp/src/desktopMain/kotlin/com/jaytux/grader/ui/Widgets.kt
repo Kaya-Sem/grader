@@ -24,13 +24,16 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.DialogWindow
-import androidx.compose.ui.window.WindowPosition
-import androidx.compose.ui.window.rememberDialogState
+import androidx.compose.ui.window.*
 import com.jaytux.grader.data.Course
 import com.jaytux.grader.data.Edition
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.datetime.*
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.format.DateTimeFormat
+import kotlinx.datetime.format.byUnicodePattern
+import java.util.*
 
 @Composable
 fun CancelSaveRow(canSave: Boolean, onCancel: () -> Unit, cancelText: String = "Cancel", saveText: String = "Save", onSave: () -> Unit) {
@@ -63,13 +66,13 @@ fun <T> TabLayout(
 }
 
 @Composable
-fun AddStringDialog(label: String, taken: List<String>, onClose: () -> Unit, onSave: (String) -> Unit) = DialogWindow(
+fun AddStringDialog(label: String, taken: List<String>, onClose: () -> Unit, current: String = "", onSave: (String) -> Unit) = DialogWindow(
     onCloseRequest = onClose,
     state = rememberDialogState(size = DpSize(400.dp, 300.dp), position = WindowPosition(Alignment.Center))
 ) {
     Surface(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().padding(10.dp)) {
-            var name by remember { mutableStateOf("") }
+            var name by remember(current) { mutableStateOf(current) }
             Column(Modifier.align(Alignment.Center)) {
                 androidx.compose.material.OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text(label) }, isError = name in taken)
                 CancelSaveRow(name.isNotBlank() && name !in taken, onClose) {
@@ -198,7 +201,7 @@ fun AutocompleteLineField(
         val (lineno, lineStart) = posToLine(pos)
 
         lines[lineno] = str
-        onValueChange(value.copy(text = lines.joinToString("\n"), selection = TextRange(lineStart + str.length)))
+        onValueChange(value.copy(text = lines.joinToString("\n"), selection = TextRange(lineStart + str.length + 1)))
     }
 
     val currentLine = {
@@ -253,5 +256,90 @@ fun AutocompleteLineField(
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DateTimePicker(
+    value: LocalDateTime,
+    onPick: (LocalDateTime) -> Unit,
+    formatter: (LocalDateTime) -> String = { java.text.DateFormat.getDateTimeInstance().format(Date.from(it.toInstant(TimeZone.currentSystemDefault()).toJavaInstant())) },
+    modifier: Modifier = Modifier,
+) {
+    var showPicker by remember { mutableStateOf(false) }
+
+    Row(modifier) {
+        Text(
+            formatter(value),
+            Modifier.align(Alignment.CenterVertically)
+        )
+        Spacer(Modifier.width(10.dp))
+        Button({ showPicker = true }) { Text("Change") }
+
+        if (showPicker) {
+            val dateState = rememberDatePickerState(value.toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds())
+            val timeState = rememberTimePickerState(value.hour, value.minute)
+
+            Dialog(
+                { showPicker = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Surface(
+                    shape = MaterialTheme.shapes.extraLarge, tonalElevation = 6.dp,
+                    modifier = Modifier.width(800.dp).height(600.dp)
+                ) {
+                    val colors = TimePickerDefaults.colors(
+                                    selectorColor = MaterialTheme.colorScheme.primary,
+                                    timeSelectorSelectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    timeSelectorSelectedContentColor = MaterialTheme.colorScheme.onPrimary,
+                                    clockDialSelectedContentColor = MaterialTheme.colorScheme.onPrimary,
+                    ) // the colors are fucked, and I don't get why :(
+
+                    Column(Modifier.padding(10.dp)) {
+                        Row {
+                            DatePicker(
+                                dateState,
+                                Modifier.padding(10.dp).weight(0.5f),
+                            )
+                            TimePicker(
+                                timeState,
+                                Modifier.weight(0.5f).align(Alignment.CenterVertically),
+                                layoutType = TimePickerLayoutType.Vertical,
+                                colors = colors
+                            )
+                        }
+                        CancelSaveRow(true, { showPicker = false }) {
+                            val date = (dateState.selectedDateMillis?.let { Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.currentSystemDefault()) } ?: value).date
+                            val time = LocalTime(timeState.hour, timeState.minute)
+
+                            onPick(LocalDateTime(date, time))
+                            showPicker = false
+                        }
+                    }
+                }
+            }
+        }
+
+
+//            DatePickerDialog(
+//            { showPicker = false },
+//            {
+//                Button({
+//                    showPicker = false; dateState.selectedDateMillis?.let { state.updateDeadline(it) }
+//                }) { Text("Set deadline") }
+//            },
+//            Modifier,
+//            { Button({ showPicker = false }) { Text("Cancel") } },
+//            shape = MaterialTheme.shapes.medium,
+//            tonalElevation = 10.dp,
+//            colors = DatePickerDefaults.colors(),
+//            properties = DialogProperties()
+//        ) {
+//            DatePicker(
+//                dateState,
+//                Modifier.fillMaxWidth().padding(10.dp),
+//            )
+//        }
     }
 }
