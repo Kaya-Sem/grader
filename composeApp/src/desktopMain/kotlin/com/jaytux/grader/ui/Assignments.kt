@@ -15,7 +15,6 @@ import androidx.compose.ui.unit.dp
 import com.jaytux.grader.viewmodel.GroupAssignmentState
 import com.mohamedrejeb.richeditor.model.rememberRichTextState
 import com.mohamedrejeb.richeditor.ui.material3.OutlinedRichTextEditor
-import com.mohamedrejeb.richeditor.ui.material3.RichTextEditor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

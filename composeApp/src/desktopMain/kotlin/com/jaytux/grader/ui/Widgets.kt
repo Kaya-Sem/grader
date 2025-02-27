@@ -343,3 +343,9 @@ fun DateTimePicker(
 //        }
     }
 }
+
+@Composable
+fun ItalicAndNormal(italic: String, normal: String) = Row{
+    Text(italic, fontStyle = FontStyle.Italic)
+    Text(normal)
+}
