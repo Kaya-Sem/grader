@@ -138,6 +138,15 @@ class EditionState(val edition: Edition) {
         }
         groupAs.refresh()
     }
+
+    fun delete(ga: GroupAssignment) {
+        transaction {
+            GroupFeedbacks.deleteWhere { groupAssignmentId eq ga.id }
+            IndividualFeedbacks.deleteWhere { groupAssignmentId eq ga.id }
+            ga.delete()
+        }
+        groupAs.refresh()
+    }
 }
 
 class StudentState(val student: Student, edition: Edition) {

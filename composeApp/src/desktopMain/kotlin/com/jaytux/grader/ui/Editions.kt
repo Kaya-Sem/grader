@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,9 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.DialogWindow
-import androidx.compose.ui.window.WindowPosition
-import androidx.compose.ui.window.rememberDialogState
+import androidx.compose.ui.window.*
 import com.jaytux.grader.data.*
 import com.jaytux.grader.viewmodel.EditionState
 import com.jaytux.grader.viewmodel.GroupAssignmentState
@@ -68,6 +67,7 @@ fun EditionView(state: EditionState) = Row(Modifier.padding(0.dp)) {
                     Box(Modifier.weight(0.5f)) {
                         GroupAssignmentsWidget(
                             state.course, state.edition, groupAs, idx.groupAsIdx(), { toggle(it, Panel.GroupAs) },
+                            { state.delete(it) },
                             { state.newGroupAssignment(it) }) { assignment, title ->
                             state.setGroupAssignmentTitle(
                                 assignment,
@@ -117,11 +117,13 @@ fun <T> EditionSideWidget(
     data: List<T>, selected: Int?, onSelect: (Int) -> Unit,
     singleWidget: @Composable (T) -> Unit,
     editDialog: @Composable ((current: T, onExit: () -> Unit) -> Unit)? = null,
+    deleter: ((T) -> Unit)? = null,
     dialog: @Composable (onExit: () -> Unit) -> Unit
 ) = Column(Modifier.padding(10.dp)) {
     Text(header, style = MaterialTheme.typography.headlineMedium)
     var showDialog by remember { mutableStateOf(false) }
     var current by remember { mutableStateOf<T?>(null) }
+    var deleting by remember { mutableStateOf<T?>(null) }
 
     ListOrEmpty(
         data,
@@ -141,6 +143,11 @@ fun <T> EditionSideWidget(
                         Icon(Icons.Default.Edit, "Edit")
                     }
                 }
+                deleter?.let { d ->
+                    IconButton({ deleting = it }, Modifier.align(Alignment.CenterVertically)) {
+                        Icon(Icons.Default.Delete, "Delete")
+                    }
+                }
             }
         }
     }
@@ -149,6 +156,24 @@ fun <T> EditionSideWidget(
     editDialog?.let { d ->
         current?.let { c ->
             d(c) { current = null }
+        }
+    }
+    deleter?.let { d ->
+        deleting?.let { x ->
+            Dialog({ deleting = null }, DialogProperties()) {
+                Surface(Modifier.width(400.dp).height(300.dp), tonalElevation = 5.dp) {
+                    Box(Modifier.fillMaxSize().padding(10.dp)) {
+                        Column(Modifier.align(Alignment.Center)) {
+                            Text("You are about to delete $addX.", Modifier.padding(10.dp))
+                            singleWidget(x)
+                            CancelSaveRow(true, { deleting = null }, "Cancel", "Delete") {
+                                d(x)
+                                deleting = null
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -290,11 +315,12 @@ fun AssignmentsWidget(
 @Composable
 fun GroupAssignmentsWidget(
     course: Course, edition: Edition, assignments: List<GroupAssignment>, selected: Int?,
-    onSelect: (Int) -> Unit, onAdd: (name: String) -> Unit, onUpdate: (GroupAssignment, String) -> Unit
+    onSelect: (Int) -> Unit, deleter: (GroupAssignment) -> Unit, onAdd: (name: String) -> Unit, onUpdate: (GroupAssignment, String) -> Unit
 ) = EditionSideWidget(
     course, edition, "Group assignment list", "group assignments", "an assignment", assignments, selected, onSelect,
     { Text(it.name, Modifier.padding(5.dp)) },
-    { current, onExit -> AddStringDialog("Assignment title", assignments.map { it.name }, onExit, current.name) { onUpdate(current, it) } }
+    { current, onExit -> AddStringDialog("Assignment title", assignments.map { it.name }, onExit, current.name) { onUpdate(current, it) } },
+    deleter
 ) { onExit ->
     AddStringDialog("Assignment title", assignments.map { it.name }, onExit) { onAdd(it) }
 }
