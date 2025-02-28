@@ -139,6 +139,30 @@ class EditionState(val edition: Edition) {
         groupAs.refresh()
     }
 
+    fun delete(s: Student) {
+        transaction {
+            EditionStudents.deleteWhere { studentId eq s.id }
+            GroupStudents.deleteWhere { studentId eq s.id }
+            IndividualFeedbacks.deleteWhere { studentId eq s.id }
+        }
+        students.refresh(); availableStudents.refresh()
+    }
+    fun delete(g: Group) {
+        transaction {
+            GroupFeedbacks.deleteWhere { groupId eq g.id }
+            IndividualFeedbacks.deleteWhere { groupId eq g.id }
+            GroupStudents.deleteWhere { groupId eq g.id }
+            g.delete()
+        }
+        groups.refresh(); groupAs.refresh()
+    }
+    fun delete(sa: SoloAssignment) {
+        transaction {
+            SoloFeedbacks.deleteWhere { soloAssignmentId eq sa.id }
+            sa.delete()
+        }
+        solo.refresh()
+    }
     fun delete(ga: GroupAssignment) {
         transaction {
             GroupFeedbacks.deleteWhere { groupAssignmentId eq ga.id }

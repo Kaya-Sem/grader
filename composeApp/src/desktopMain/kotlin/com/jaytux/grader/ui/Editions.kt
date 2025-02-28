@@ -60,6 +60,7 @@ fun EditionView(state: EditionState) = Row(Modifier.padding(0.dp)) {
                             groups,
                             idx.groupIdx(),
                             { toggle(it, Panel.Group) },
+                            { state.delete(it) },
                             { state.newGroup(it) }) { group, name ->
                             state.setGroupName(group, name)
                         }
@@ -79,7 +80,8 @@ fun EditionView(state: EditionState) = Row(Modifier.padding(0.dp)) {
                     Box(Modifier.weight(0.5f)) {
                         StudentsWidget(
                             state.course, state.edition, students, idx.studentIdx(), { toggle(it, Panel.Student) },
-                            available, { state.addToCourse(it) }
+                            available, { state.addToCourse(it) },
+                            { state.delete(it) },
                         ) { name, note, contact, addToEdition ->
                             state.newStudent(name, contact, note, addToEdition)
                         }
@@ -91,6 +93,7 @@ fun EditionView(state: EditionState) = Row(Modifier.padding(0.dp)) {
                             solo,
                             idx.soloIdx(),
                             { toggle(it, Panel.Solo) },
+                            { state.delete(it) },
                             { state.newSoloAssignment(it) }) { assignment, title ->
                             state.setSoloAssignmentTitle(assignment, title)
                         }
@@ -160,7 +163,10 @@ fun <T> EditionSideWidget(
     }
     deleter?.let { d ->
         deleting?.let { x ->
-            Dialog({ deleting = null }, DialogProperties()) {
+            DialogWindow(
+                onCloseRequest = { deleting = null },
+                state = rememberDialogState(size = DpSize(400.dp, 300.dp), position = WindowPosition(Alignment.Center))
+            ) {
                 Surface(Modifier.width(400.dp).height(300.dp), tonalElevation = 5.dp) {
                     Box(Modifier.fillMaxSize().padding(10.dp)) {
                         Column(Modifier.align(Alignment.Center)) {
@@ -181,11 +187,12 @@ fun <T> EditionSideWidget(
 @Composable
 fun StudentsWidget(
     course: Course, edition: Edition, students: List<Student>, selected: Int?, onSelect: (Int) -> Unit,
-    availableStudents: List<Student>, onImport: (List<Student>) -> Unit,
+    availableStudents: List<Student>, onImport: (List<Student>) -> Unit, deleter: (Student) -> Unit,
     onAdd: (name: String, note: String, contact: String, addToEdition: Boolean) -> Unit
 ) = EditionSideWidget(
     course, edition, "Student list (${students.size})", "students", "a student", students, selected, onSelect,
-    { Text(it.name, Modifier.padding(5.dp)) }
+    { Text(it.name, Modifier.padding(5.dp)) },
+    deleter = deleter
 ) { onExit ->
     StudentDialog(course, edition, onExit, availableStudents, onImport, onAdd)
 }
@@ -291,11 +298,12 @@ fun StudentDialog(
 @Composable
 fun GroupsWidget(
     course: Course, edition: Edition, groups: List<Group>, selected: Int?, onSelect: (Int) -> Unit,
-    onAdd: (name: String) -> Unit, onUpdate: (Group, String) -> Unit
+    deleter: (Group) -> Unit, onAdd: (name: String) -> Unit, onUpdate: (Group, String) -> Unit
 ) = EditionSideWidget(
     course, edition, "Group list (${groups.size})", "groups", "a group", groups, selected, onSelect,
     { Text(it.name, Modifier.padding(5.dp)) },
-    { current, onExit -> AddStringDialog("Group name", groups.map { it.name }, onExit, current.name) { onUpdate(current, it) } }
+    { current, onExit -> AddStringDialog("Group name", groups.map { it.name }, onExit, current.name) { onUpdate(current, it) } },
+    deleter
 ) { onExit ->
     AddStringDialog("Group name", groups.map { it.name }, onExit) { onAdd(it) }
 }
@@ -303,11 +311,12 @@ fun GroupsWidget(
 @Composable
 fun AssignmentsWidget(
     course: Course, edition: Edition, assignments: List<SoloAssignment>, selected: Int?,
-    onSelect: (Int) -> Unit, onAdd: (name: String) -> Unit, onUpdate: (SoloAssignment, String) -> Unit
+    onSelect: (Int) -> Unit, deleter: (SoloAssignment) -> Unit, onAdd: (name: String) -> Unit, onUpdate: (SoloAssignment, String) -> Unit
 ) = EditionSideWidget(
     course, edition, "Assignment list", "assignments", "an assignment", assignments, selected, onSelect,
     { Text(it.name, Modifier.padding(5.dp)) },
-    { current, onExit -> AddStringDialog("Assignment title", assignments.map { it.name }, onExit, current.name) { onUpdate(current, it) } }
+    { current, onExit -> AddStringDialog("Assignment title", assignments.map { it.name }, onExit, current.name) { onUpdate(current, it) } },
+    deleter
 ) { onExit ->
     AddStringDialog("Assignment title", assignments.map { it.name }, onExit) { onAdd(it) }
 }
