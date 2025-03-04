@@ -17,6 +17,34 @@ import java.util.*
 fun <T> MutableState<T>.immutable(): State<T> = this
 fun <T> SizedIterable<T>.sortAsc(vararg columns: Expression<*>) = this.orderBy(*(columns.map { it to SortOrder.ASC }.toTypedArray()))
 
+enum class AssignmentType { Solo, Group }
+sealed class Assignment {
+    class GAssignment(val assignment: GroupAssignment) : Assignment() {
+        override fun name(): String = assignment.name
+        override fun id(): EntityID<UUID> = assignment.id
+    }
+    class SAssignment(val assignment: SoloAssignment) : Assignment() {
+        override fun name(): String = assignment.name
+        override fun id(): EntityID<UUID> = assignment.id
+    }
+
+    abstract fun name(): String
+    abstract fun id(): EntityID<UUID>
+
+    companion object {
+        fun from(assignment: GroupAssignment) = GAssignment(assignment)
+        fun from(assignment: SoloAssignment) = SAssignment(assignment)
+
+        fun merge(groups: List<GroupAssignment>, solos: List<SoloAssignment>): List<Assignment> {
+            val g = groups.map { from(it) }
+            val s = solos.map { from(it) }
+            return (g + s).sortedBy {
+                (it as? GAssignment)?.assignment?.name ?: (it as SAssignment).assignment.name
+            }
+        }
+    }
+}
+
 class RawDbState<T: Any>(private val loader: (Transaction.() -> List<T>)) {
 
     private val rawEntities by lazy {
@@ -84,7 +112,12 @@ class EditionState(val edition: Edition) {
         if(addToEdition) students.refresh()
         else availableStudents.refresh()
     }
-
+    fun setStudentName(student: Student, name: String) {
+        transaction {
+            student.name = name
+        }
+        students.refresh()
+    }
     fun addToCourse(students: List<Student>) {
         transaction {
             EditionStudents.batchInsert(students) {
@@ -92,7 +125,7 @@ class EditionState(val edition: Edition) {
                 this[studentId] = it.id
             }
         }
-        availableStudents.refresh();
+        availableStudents.refresh()
         this.students.refresh()
     }
 
@@ -139,6 +172,15 @@ class EditionState(val edition: Edition) {
         groupAs.refresh()
     }
 
+    fun newAssignment(type: AssignmentType, name: String) = when(type) {
+        AssignmentType.Solo -> newSoloAssignment(name)
+        AssignmentType.Group -> newGroupAssignment(name)
+    }
+    fun setAssignmentTitle(assignment: Assignment, title: String) = when(assignment) {
+        is Assignment.GAssignment -> setGroupAssignmentTitle(assignment.assignment, title)
+        is Assignment.SAssignment -> setSoloAssignmentTitle(assignment.assignment, title)
+    }
+
     fun delete(s: Student) {
         transaction {
             EditionStudents.deleteWhere { studentId eq s.id }
@@ -170,6 +212,10 @@ class EditionState(val edition: Edition) {
             ga.delete()
         }
         groupAs.refresh()
+    }
+    fun delete(assignment: Assignment) = when(assignment) {
+        is Assignment.GAssignment -> delete(assignment.assignment)
+        is Assignment.SAssignment -> delete(assignment.assignment)
     }
 }
 
@@ -337,7 +383,7 @@ class GroupAssignmentState(val assignment: GroupAssignment) {
                 it[this.grade] = grd
             }
         }
-        feedback.refresh()
+        feedback.refresh(); autofill.refresh()
     }
 
     fun upsertIndividualFeedback(student: Student, group: Group, msg: String, grd: String) {
@@ -345,6 +391,59 @@ class GroupAssignmentState(val assignment: GroupAssignment) {
             IndividualFeedbacks.upsert {
                 it[groupAssignmentId] = assignment.id
                 it[groupId] = group.id
+                it[studentId] = student.id
+                it[this.feedback] = msg
+                it[this.grade] = grd
+            }
+        }
+        feedback.refresh(); autofill.refresh()
+    }
+
+    fun updateTask(t: String) {
+        transaction {
+            assignment.assignment = t
+        }
+        _task.value = t
+    }
+
+    fun updateDeadline(d: LocalDateTime) {
+        transaction {
+            assignment.deadline = d
+        }
+        _deadline.value = d
+    }
+}
+
+class SoloAssignmentState(val assignment: SoloAssignment) {
+    data class LocalFeedback(val feedback: String, val grade: String)
+
+    val editionCourse = transaction { assignment.edition.course to assignment.edition }
+    private val _name = mutableStateOf(assignment.name); val name = _name.immutable()
+    private val _task = mutableStateOf(assignment.assignment); val task = _task.immutable()
+    val feedback = RawDbState { loadFeedback() }
+    private val _deadline = mutableStateOf(assignment.deadline); val deadline = _deadline.immutable()
+
+    val autofill = RawDbState {
+        SoloFeedbacks.selectAll().where { SoloFeedbacks.soloAssignmentId eq assignment.id }.map {
+            it[SoloFeedbacks.feedback].split('\n')
+        }.flatten().distinct().sorted()
+    }
+
+    private fun Transaction.loadFeedback(): List<Pair<Student, LocalFeedback?>> {
+        val students = editionCourse.second.soloStudents
+        val feedbacks = SoloFeedbacks.selectAll().where {
+            SoloFeedbacks.soloAssignmentId eq assignment.id
+        }.associate {
+            it[SoloFeedbacks.studentId] to LocalFeedback(it[SoloFeedbacks.feedback], it[SoloFeedbacks.grade])
+        }
+
+        return students.map { s -> s to feedbacks[s.id] }
+    }
+
+    fun upsertFeedback(student: Student, msg: String, grd: String) {
+        transaction {
+            SoloFeedbacks.upsert {
+                it[soloAssignmentId] = assignment.id
                 it[studentId] = student.id
                 it[this.feedback] = msg
                 it[this.grade] = grd

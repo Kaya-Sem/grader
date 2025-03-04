@@ -27,14 +27,16 @@ fun CoursesView(state: CourseListState, push: (UiRoute) -> Unit) {
     val data by state.courses.entities
     var showDialog by remember { mutableStateOf(false) }
 
-    ListOrEmpty(
-        data,
-        { Text("You have no courses yet.", Modifier.align(Alignment.CenterHorizontally)) },
-        { Text("Add a course") },
-        { showDialog = true },
-        addAfterLazy = false
-    ) { _, it ->
-        CourseWidget(state.getEditions(it), { state.delete(it) }, push)
+    Box(Modifier.padding(15.dp)) {
+        ListOrEmpty(
+            data,
+            { Text("You have no courses yet.", Modifier.align(Alignment.CenterHorizontally)) },
+            { Text("Add a course") },
+            { showDialog = true },
+            addAfterLazy = false
+        ) { _, it ->
+            CourseWidget(state.getEditions(it), { state.delete(it) }, push)
+        }
     }
 
     if(showDialog) AddStringDialog("Course name", data.map { it.name }, { showDialog = false }) { state.new(it) }

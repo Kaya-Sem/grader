@@ -17,12 +17,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.rememberDialogState
+import com.jaytux.grader.data.Group
+import com.jaytux.grader.data.Student
 import com.jaytux.grader.maxN
 import com.jaytux.grader.viewmodel.GroupState
 import com.jaytux.grader.viewmodel.StudentState
 
 @Composable
-fun StudentView(state: StudentState) {
+fun StudentView(state: StudentState, nav: Navigators) {
     val groups by state.groups.entities
     val courses by state.courseEditions.entities
     val groupGrades by state.groupGrades.entities
@@ -48,9 +50,9 @@ fun StudentView(state: StudentState) {
                 Column(Modifier.weight(0.45f)) {
                     Text("Groups", style = MaterialTheme.typography.headlineSmall)
                     ListOrEmpty(groups, { Text("Not a member of any group") }) { _, it ->
-                        Row {
-                            val (group, c) = it
-                            val (course, ed) = c
+                        val (group, c) = it
+                        val (course, ed) = c
+                        Row(Modifier.clickable { nav.group(group) }) {
                             Text(group.name, style = MaterialTheme.typography.bodyMedium)
                             Spacer(Modifier.width(5.dp))
                             Text(
@@ -144,7 +146,7 @@ fun soloGradeWidget(sg: StudentState.LocalSoloGrade) {
 }
 
 @Composable
-fun GroupView(state: GroupState) {
+fun GroupView(state: GroupState, nav: Navigators) {
     val members by state.members.entities
     val available by state.availableStudents.entities
     val allRoles by state.roles.entities
@@ -159,7 +161,7 @@ fun GroupView(state: GroupState) {
                 Text("Students", style = MaterialTheme.typography.headlineSmall)
                 ListOrEmpty(members, { Text("No students in this group") }) { _, it ->
                     val (student, role) = it
-                    Row {
+                    Row(Modifier.clickable { nav.student(student) }) {
                         Text(
                             "${student.name} (${role ?: "no role"})",
                             Modifier.weight(0.75f).align(Alignment.CenterVertically),
@@ -177,7 +179,7 @@ fun GroupView(state: GroupState) {
             Column(Modifier.weight(0.5f)) {
                 Text("Available students", style = MaterialTheme.typography.headlineSmall)
                 ListOrEmpty(available, { Text("No students available") }) { _, it ->
-                    Row(Modifier.padding(5.dp)) {
+                    Row(Modifier.padding(5.dp).clickable { nav.student(it) }) {
                         IconButton({ state.addStudent(it) }) {
                             Icon(ChevronLeft, "Add student")
                         }

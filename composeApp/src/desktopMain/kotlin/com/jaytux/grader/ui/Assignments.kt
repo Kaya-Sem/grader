@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.jaytux.grader.viewmodel.GroupAssignmentState
+import com.jaytux.grader.viewmodel.SoloAssignmentState
 import com.mohamedrejeb.richeditor.model.rememberRichTextState
 import com.mohamedrejeb.richeditor.ui.material3.OutlinedRichTextEditor
 
@@ -140,6 +141,96 @@ fun groupFeedback(state: GroupAssignmentState, fdbk: GroupAssignmentState.LocalG
                     sMsg, { sMsg = it }, Modifier.fillMaxWidth().weight(1f), { Text("Feedback") }
                 ) { filter ->
                     suggestions.filter { x -> x.trim().startsWith(filter.trim()) }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SoloAssignmentView(state: SoloAssignmentState) {
+    val name by state.name
+    val (course, edition) = state.editionCourse
+    val task by state.task
+    val deadline by state.deadline
+    val suggestions by state.autofill.entities
+    val grades by state.feedback.entities
+
+    var idx by remember(state) { mutableStateOf(0) }
+
+    Column(Modifier.padding(10.dp)) {
+        PaneHeader(name, "individual assignment", course, edition)
+        Row {
+            Surface(Modifier.weight(0.25f), tonalElevation = 10.dp) {
+                LazyColumn(Modifier.fillMaxHeight().padding(10.dp)) {
+                    item {
+                        Surface(
+                            Modifier.fillMaxWidth().clickable { idx = 0 },
+                            tonalElevation = if (idx == 0) 50.dp else 0.dp,
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Text("Assignment", Modifier.padding(5.dp), fontStyle = FontStyle.Italic)
+                        }
+                    }
+
+                    itemsIndexed(grades.toList()) { i, (student, _) ->
+                        Surface(
+                            Modifier.fillMaxWidth().clickable { idx = i + 1 },
+                            tonalElevation = if (idx == i + 1) 50.dp else 0.dp,
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Text(student.name, Modifier.padding(5.dp))
+                        }
+                    }
+                }
+            }
+
+            Column(Modifier.weight(0.75f).padding(10.dp)) {
+                if (idx == 0) {
+                    val updTask = rememberRichTextState()
+
+                    LaunchedEffect(task) { updTask.setMarkdown(task) }
+
+                    Row {
+                        DateTimePicker(deadline, { state.updateDeadline(it) })
+                    }
+                    RichTextStyleRow(state = updTask)
+                    OutlinedRichTextEditor(
+                        state = updTask,
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        singleLine = false,
+                        minLines = 5,
+                        label = { Text("Task") }
+                    )
+                    CancelSaveRow(
+                        true,
+                        { updTask.setMarkdown(task) },
+                        "Reset",
+                        "Update"
+                    ) { state.updateTask(updTask.toMarkdown()) }
+                } else {
+                    val (student, fg) = grades[idx - 1]
+                    var sGrade by remember { mutableStateOf(fg?.grade ?: "") }
+                    var sMsg by remember { mutableStateOf(TextFieldValue(fg?.feedback ?: "")) }
+                    Row {
+                        Text("Grade: ", Modifier.align(Alignment.CenterVertically))
+                        OutlinedTextField(sGrade, { sGrade = it }, Modifier.weight(0.2f))
+                        Spacer(Modifier.weight(0.6f))
+                        Button(
+                            { state.upsertFeedback(student, sMsg.text, sGrade) },
+                            Modifier.weight(0.2f).align(Alignment.CenterVertically),
+                            enabled = sGrade.isNotBlank() || sMsg.text.isNotBlank()
+                        ) {
+                            Text("Save")
+                        }
+                    }
+
+                    AutocompleteLineField(
+                        sMsg, { sMsg = it }, Modifier.fillMaxWidth().weight(1f), { Text("Feedback") }
+                    ) { filter ->
+                        suggestions.filter { x -> x.trim().startsWith(filter.trim()) }
+                    }
                 }
             }
         }

@@ -9,6 +9,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,8 +33,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.*
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.format.DateTimeFormat
-import kotlinx.datetime.format.byUnicodePattern
 import java.util.*
 
 @Composable
@@ -74,12 +74,66 @@ fun AddStringDialog(label: String, taken: List<String>, onClose: () -> Unit, cur
         Box(Modifier.fillMaxSize().padding(10.dp)) {
             var name by remember(current) { mutableStateOf(current) }
             Column(Modifier.align(Alignment.Center)) {
-                androidx.compose.material.OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text(label) }, isError = name in taken)
+                OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text(label) }, isError = name in taken)
                 CancelSaveRow(name.isNotBlank() && name !in taken, onClose) {
                     onSave(name)
                     onClose()
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun ConfirmDeleteDialog(
+    deleteAWhat: String,
+    onExit: () -> Unit,
+    onDelete: () -> Unit,
+    render: @Composable () -> Unit
+) = DialogWindow(
+    onCloseRequest = onExit,
+    state = rememberDialogState(size = DpSize(400.dp, 300.dp), position = WindowPosition(Alignment.Center))
+) {
+    Surface(Modifier.width(400.dp).height(300.dp), tonalElevation = 5.dp) {
+        Box(Modifier.fillMaxSize().padding(10.dp)) {
+            Column(Modifier.align(Alignment.Center)) {
+                Text("You are about to delete $deleteAWhat.", Modifier.padding(10.dp))
+                render()
+                CancelSaveRow(true, onExit, "Cancel", "Delete") {
+                    onDelete()
+                    onExit()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun <T> ListOrEmpty(
+    data: List<T>,
+    onEmpty: @Composable ColumnScope.() -> Unit,
+    addOptions: @Composable ColumnScope.() -> Unit,
+    addAfterLazy: Boolean = true,
+    item: @Composable LazyItemScope.(idx: Int, it: T) -> Unit
+) {
+    if(data.isEmpty()) {
+        Box(Modifier.fillMaxSize()) {
+            Column(Modifier.align(Alignment.Center)) {
+                onEmpty()
+                addOptions()
+            }
+        }
+    }
+    else {
+        Column {
+            LazyColumn(Modifier.weight(1f)) {
+                itemsIndexed(data) { idx, it ->
+                    item(idx, it)
+                }
+
+                if(!addAfterLazy) item { addOptions() }
+            }
+            if(addAfterLazy) addOptions()
         }
     }
 }
@@ -92,41 +146,12 @@ fun <T> ListOrEmpty(
     onAdd: () -> Unit,
     addAfterLazy: Boolean = true,
     item: @Composable LazyItemScope.(idx: Int, it: T) -> Unit
-) {
-    if(data.isEmpty()) {
-        Box(Modifier.fillMaxSize()) {
-            Column(Modifier.align(Alignment.Center)) {
-                emptyText()
-                Button(onAdd, Modifier.align(Alignment.CenterHorizontally)) {
-                    addText()
-                }
-            }
-        }
-    }
-    else {
-        Column {
-            LazyColumn(Modifier.padding(5.dp).weight(1f)) {
-                itemsIndexed(data) { idx, it ->
-                    item(idx, it)
-                }
-
-                if(!addAfterLazy) {
-                    item {
-                        Button(onAdd, Modifier.fillMaxWidth()) {
-                            addText()
-                        }
-                    }
-                }
-            }
-
-            if(addAfterLazy) {
-                Button(onAdd, Modifier.fillMaxWidth()) {
-                    addText()
-                }
-            }
-        }
-    }
-}
+) = ListOrEmpty(
+    data, emptyText,
+    { Button(onAdd, Modifier.align(Alignment.CenterHorizontally).fillMaxWidth()) { addText() } },
+    addAfterLazy,
+    item
+)
 
 @Composable
 fun <T> ListOrEmpty(
@@ -348,4 +373,25 @@ fun DateTimePicker(
 fun ItalicAndNormal(italic: String, normal: String) = Row{
     Text(italic, fontStyle = FontStyle.Italic)
     Text(normal)
+}
+
+@Composable
+fun SelectEditDeleteRow(
+    isSelected: Boolean,
+    onSelect: () -> Unit, onDeselect: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit,
+    content: @Composable BoxScope.() -> Unit
+) = Surface(
+            Modifier.fillMaxWidth().clickable { if(isSelected) onDeselect() else onSelect() },
+            tonalElevation = if (isSelected) 50.dp else 0.dp,
+            shape = MaterialTheme.shapes.medium
+        ) {
+    Row {
+        Box(Modifier.weight(1f).align(Alignment.CenterVertically)) { content() }
+        IconButton(onEdit, Modifier.align(Alignment.CenterVertically)) {
+            Icon(Icons.Default.Edit, "Edit")
+        }
+        IconButton(onDelete, Modifier.align(Alignment.CenterVertically)) {
+            Icon(Icons.Default.Delete, "Delete")
+        }
+    }
 }

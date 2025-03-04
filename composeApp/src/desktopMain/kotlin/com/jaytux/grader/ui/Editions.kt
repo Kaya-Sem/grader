@@ -4,9 +4,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,185 +13,264 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.*
 import com.jaytux.grader.data.*
-import com.jaytux.grader.viewmodel.EditionState
-import com.jaytux.grader.viewmodel.GroupAssignmentState
-import com.jaytux.grader.viewmodel.GroupState
-import com.jaytux.grader.viewmodel.StudentState
+import com.jaytux.grader.viewmodel.*
 
-enum class Panel { Student, Group, Solo, GroupAs }
-data class Current(val p: Panel, val i: Int)
-fun Current?.studentIdx() = this?.let { if(p == Panel.Student) i else null }
-fun Current?.groupIdx() = this?.let { if(p == Panel.Group) i else null }
-fun Current?.soloIdx() = this?.let { if(p == Panel.Solo) i else null }
-fun Current?.groupAsIdx() = this?.let { if(p == Panel.GroupAs) i else null }
+enum class OpenPanel(val tabName: String) {
+    Student("Students"), Group("Groups"), Assignment("Assignments")
+}
+
+data class Navigators(
+    val student: (Student) -> Unit,
+    val group: (Group) -> Unit,
+    val assignment: (Assignment) -> Unit
+)
 
 @Composable
 fun EditionView(state: EditionState) = Row(Modifier.padding(0.dp)) {
-    var isGroup by remember { mutableStateOf(false) }
-    var idx by remember { mutableStateOf<Current?>(null) }
-
+    val course = state.course; val edition = state.edition
     val students by state.students.entities
+    val availableStudents by state.availableStudents.entities
     val groups by state.groups.entities
     val solo by state.solo.entities
     val groupAs by state.groupAs.entities
-    val available by state.availableStudents.entities
-
-    val toggle = { i: Int, p: Panel ->
-        idx = if(idx?.p == p && idx?.i == i) null else Current(p, i)
+    val mergedAssignments by remember(solo, groupAs) {
+        mutableStateOf(Assignment.merge(groupAs, solo))
     }
+    var selected by remember { mutableStateOf(-1) }
+    var tab by remember { mutableStateOf(OpenPanel.Assignment) }
 
+    val navs = Navigators(
+        student = { tab = OpenPanel.Student; selected = students.indexOfFirst { s -> s.id == it.id } },
+        group = { tab = OpenPanel.Group; selected = groups.indexOfFirst { g -> g.id == it.id } },
+        assignment = { tab = OpenPanel.Assignment; selected = mergedAssignments.indexOfFirst { a -> a.id() == it.id() } }
+    )
 
     Surface(Modifier.weight(0.25f), tonalElevation = 5.dp) {
         TabLayout(
-            listOf("Students", "Groups"),
-            if (isGroup) 1 else 0,
-            { isGroup = it == 1 },
-            { Text(it) }
+            OpenPanel.entries,
+            tab.ordinal,
+            { tab = OpenPanel.entries[it]; selected = -1 },
+            { Text(it.tabName) }
         ) {
-            Column(Modifier.fillMaxSize()) {
-                if (isGroup) {
-                    Box(Modifier.weight(0.5f)) {
-                        GroupsWidget(
-                            state.course,
-                            state.edition,
-                            groups,
-                            idx.groupIdx(),
-                            { toggle(it, Panel.Group) },
-                            { state.delete(it) },
-                            { state.newGroup(it) }) { group, name ->
-                            state.setGroupName(group, name)
-                        }
-                    }
-                    Box(Modifier.weight(0.5f)) {
-                        GroupAssignmentsWidget(
-                            state.course, state.edition, groupAs, idx.groupAsIdx(), { toggle(it, Panel.GroupAs) },
-                            { state.delete(it) },
-                            { state.newGroupAssignment(it) }) { assignment, title ->
-                            state.setGroupAssignmentTitle(
-                                assignment,
-                                title
-                            )
-                        }
-                    }
-                } else {
-                    Box(Modifier.weight(0.5f)) {
-                        StudentsWidget(
-                            state.course, state.edition, students, idx.studentIdx(), { toggle(it, Panel.Student) },
-                            available, { state.addToCourse(it) },
-                            { state.delete(it) },
-                        ) { name, note, contact, addToEdition ->
-                            state.newStudent(name, contact, note, addToEdition)
-                        }
-                    }
-                    Box(Modifier.weight(0.5f)) {
-                        AssignmentsWidget(
-                            state.course,
-                            state.edition,
-                            solo,
-                            idx.soloIdx(),
-                            { toggle(it, Panel.Solo) },
-                            { state.delete(it) },
-                            { state.newSoloAssignment(it) }) { assignment, title ->
-                            state.setSoloAssignmentTitle(assignment, title)
-                        }
-                    }
-                }
+            when(tab) {
+                OpenPanel.Student -> StudentPanel(
+                    course, edition, students, availableStudents, selected,
+                    { selected = it },
+                    { name, note, contact, add -> state.newStudent(name, contact, note, add) },
+                    { students -> state.addToCourse(students) },
+                    { s, name -> state.setStudentName(s, name) }
+                ) { s -> state.delete(s) }
+
+                OpenPanel.Group -> GroupPanel(
+                    course, edition, groups, selected,
+                    { selected = it },
+                    { name -> state.newGroup(name) },
+                    { g, name -> state.setGroupName(g, name) }
+                ) { g -> state.delete(g) }
+
+                OpenPanel.Assignment -> AssignmentPanel(
+                    course, edition, mergedAssignments, selected,
+                    { selected = it },
+                    { type, name -> state.newAssignment(type, name) },
+                    { a, name -> state.setAssignmentTitle(a, name) }
+                ) { a -> state.delete(a) }
             }
         }
     }
+
     Box(Modifier.weight(0.75f)) {
-        idx?.let { i ->
-            when(i.p) {
-                Panel.Student -> StudentView(StudentState(students[i.i], state.edition))
-                Panel.Group -> GroupView(GroupState(groups[i.i]))
-                Panel.GroupAs -> GroupAssignmentView(GroupAssignmentState(groupAs[i.i]))
-                else -> {}
+        if(selected != -1) {
+            when(tab) {
+                OpenPanel.Student -> StudentView(StudentState(students[selected], edition), navs)
+                OpenPanel.Group -> GroupView(GroupState(groups[selected]), navs)
+                OpenPanel.Assignment -> {
+                    when(val a = mergedAssignments[selected]) {
+                        is Assignment.SAssignment -> SoloAssignmentView(SoloAssignmentState(a.assignment))
+                        is Assignment.GAssignment -> GroupAssignmentView(GroupAssignmentState(a.assignment))
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-fun <T> EditionSideWidget(
-    course: Course, edition: Edition, header: String, hasNoX: String, addX: String,
-    data: List<T>, selected: Int?, onSelect: (Int) -> Unit,
-    singleWidget: @Composable (T) -> Unit,
-    editDialog: @Composable ((current: T, onExit: () -> Unit) -> Unit)? = null,
-    deleter: ((T) -> Unit)? = null,
-    dialog: @Composable (onExit: () -> Unit) -> Unit
+fun StudentPanel(
+    course: Course, edition: Edition, students: List<Student>, available: List<Student>,
+    selected: Int, onSelect: (Int) -> Unit,
+    onAdd: (name: String, note: String, contact: String, addToEdition: Boolean) -> Unit,
+    onImport: (List<Student>) -> Unit, onUpdate: (Student, String) -> Unit, onDelete: (Student) -> Unit
 ) = Column(Modifier.padding(10.dp)) {
-    Text(header, style = MaterialTheme.typography.headlineMedium)
     var showDialog by remember { mutableStateOf(false) }
-    var current by remember { mutableStateOf<T?>(null) }
-    var deleting by remember { mutableStateOf<T?>(null) }
+    var deleting by remember { mutableStateOf(-1) }
+    var editing by remember { mutableStateOf(-1) }
+
+    Text("Student list (${students.size})", style = MaterialTheme.typography.headlineMedium)
 
     ListOrEmpty(
-        data,
-        { Text("Course ${course.name} (edition ${edition.name})\nhas no $hasNoX yet.", Modifier.align(Alignment.CenterHorizontally), textAlign = TextAlign.Center) },
-        { Text("Add $addX") },
+        students,
+        { Text(
+            "Course ${course.name} (edition ${edition.name})\nhas no students yet.",
+            Modifier.align(Alignment.CenterHorizontally), textAlign = TextAlign.Center
+        ) },
+        { Text("Add a student") },
         { showDialog = true }
     ) { idx, it ->
-        Surface(
-            Modifier.fillMaxWidth().clickable { onSelect(idx) },
-            tonalElevation = if (selected == idx) 50.dp else 0.dp,
-            shape = MaterialTheme.shapes.medium
+        SelectEditDeleteRow(
+            selected == idx,
+            { onSelect(idx) }, { onSelect(-1) },
+            { editing = idx }, { deleting = idx }
         ) {
-            Row {
-                Box(Modifier.weight(1f).align(Alignment.CenterVertically)) { singleWidget(it) }
-                editDialog?.let { _ ->
-                    IconButton({ current = it }, Modifier.align(Alignment.CenterVertically)) {
-                        Icon(Icons.Default.Edit, "Edit")
-                    }
-                }
-                deleter?.let { d ->
-                    IconButton({ deleting = it }, Modifier.align(Alignment.CenterVertically)) {
-                        Icon(Icons.Default.Delete, "Delete")
-                    }
-                }
-            }
+            Text(it.name, Modifier.padding(5.dp))
         }
     }
 
-    if(showDialog) dialog { showDialog = false }
-    editDialog?.let { d ->
-        current?.let { c ->
-            d(c) { current = null }
+    if(showDialog) {
+        StudentDialog(course, edition, { showDialog = false }, available, onImport, onAdd)
+    }
+    else if(editing != -1) {
+        AddStringDialog("Student name", students.map { it.name }, { editing = -1 }, students[editing].name) {
+            onUpdate(students[editing], it)
         }
     }
-    deleter?.let { d ->
-        deleting?.let { x ->
+    else if(deleting != -1) {
+        ConfirmDeleteDialog(
+            "a student",
+            { deleting = -1 },
+            { onDelete(students[deleting]) }
+        ) { Text(students[deleting].name) }
+    }
+}
+
+@Composable
+fun GroupPanel(
+    course: Course, edition: Edition, groups: List<Group>,
+    selected: Int, onSelect: (Int) -> Unit,
+    onAdd: (String) -> Unit, onUpdate: (Group, String) -> Unit, onDelete: (Group) -> Unit
+) = Column(Modifier.padding(10.dp)) {
+    var showDialog by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(-1) }
+    var editing by remember { mutableStateOf(-1) }
+
+    Text("Group list (${groups.size})", style = MaterialTheme.typography.headlineMedium)
+
+    ListOrEmpty(
+        groups,
+        { Text(
+            "Course ${course.name} (edition ${edition.name})\nhas no groups yet.",
+            Modifier.align(Alignment.CenterHorizontally), textAlign = TextAlign.Center
+        ) },
+        { Text("Add a group") },
+        { showDialog = true }
+    ) { idx, it ->
+        SelectEditDeleteRow(
+            selected == idx,
+            { onSelect(idx) }, { onSelect(-1) },
+            { editing = idx }, { deleting = idx }
+        ) {
+            Text(it.name, Modifier.padding(5.dp))
+        }
+    }
+
+    if(showDialog) {
+        AddStringDialog("Group name", groups.map{ it.name }, { showDialog = false }) { onAdd(it) }
+    }
+    else if(editing != -1) {
+        AddStringDialog("Group name", groups.map { it.name }, { editing = -1 }, groups[editing].name) {
+            onUpdate(groups[editing], it)
+        }
+    }
+    else if(deleting != -1) {
+        ConfirmDeleteDialog(
+            "a group",
+            { deleting = -1 },
+            { onDelete(groups[deleting]) }
+        ) { Text(groups[deleting].name) }
+    }
+}
+
+@Composable
+fun AssignmentPanel(
+    course: Course, edition: Edition, assignments: List<Assignment>,
+    selected: Int, onSelect: (Int) -> Unit,
+    onAdd: (AssignmentType, String) -> Unit, onUpdate: (Assignment, String) -> Unit,
+    onDelete: (Assignment) -> Unit
+) = Column(Modifier.padding(10.dp)) {
+    var showDialog by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(-1) }
+    var editing by remember { mutableStateOf(-1) }
+
+    val dialog: @Composable (String, List<String>, () -> Unit, String, (AssignmentType, String) -> Unit) -> Unit =
+        { label, taken, onClose, current, onSave ->
             DialogWindow(
-                onCloseRequest = { deleting = null },
+                onCloseRequest = onClose,
                 state = rememberDialogState(size = DpSize(400.dp, 300.dp), position = WindowPosition(Alignment.Center))
             ) {
-                Surface(Modifier.width(400.dp).height(300.dp), tonalElevation = 5.dp) {
-                    Box(Modifier.fillMaxSize().padding(10.dp)) {
-                        Column(Modifier.align(Alignment.Center)) {
-                            Text("You are about to delete $addX.", Modifier.padding(10.dp))
-                            singleWidget(x)
-                            CancelSaveRow(true, { deleting = null }, "Cancel", "Delete") {
-                                d(x)
-                                deleting = null
+                var name by remember(current) { mutableStateOf(current) }
+                var tab by remember { mutableStateOf(AssignmentType.Solo) }
+
+                Surface(Modifier.fillMaxSize()) {
+                    TabLayout(
+                        AssignmentType.entries,
+                        tab.ordinal,
+                        { tab = AssignmentType.entries[it] },
+                        { Text(it.name) }
+                    ) {
+                        Box(Modifier.fillMaxSize().padding(10.dp)) {
+                            Column(Modifier.align(Alignment.Center)) {
+                                OutlinedTextField(
+                                    name,
+                                    { name = it },
+                                    Modifier.fillMaxWidth(),
+                                    label = { Text(label) },
+                                    isError = name in taken
+                                )
+                                CancelSaveRow(name.isNotBlank() && name !in taken, onClose) {
+                                    onSave(tab, name)
+                                    onClose()
+                                }
                             }
                         }
                     }
                 }
             }
         }
-    }
-}
 
-@Composable
-fun StudentsWidget(
-    course: Course, edition: Edition, students: List<Student>, selected: Int?, onSelect: (Int) -> Unit,
-    availableStudents: List<Student>, onImport: (List<Student>) -> Unit, deleter: (Student) -> Unit,
-    onAdd: (name: String, note: String, contact: String, addToEdition: Boolean) -> Unit
-) = EditionSideWidget(
-    course, edition, "Student list (${students.size})", "students", "a student", students, selected, onSelect,
-    { Text(it.name, Modifier.padding(5.dp)) },
-    deleter = deleter
-) { onExit ->
-    StudentDialog(course, edition, onExit, availableStudents, onImport, onAdd)
+    Text("Assignment list (${assignments.size})", style = MaterialTheme.typography.headlineMedium)
+
+    ListOrEmpty(
+        assignments,
+        { Text(
+            "Course ${course.name} (edition ${edition.name})\nhas no assignments yet.",
+            Modifier.align(Alignment.CenterHorizontally), textAlign = TextAlign.Center
+        ) },
+        { Text("Add an assignment") },
+        { showDialog = true }
+    ) { idx, it ->
+        SelectEditDeleteRow(
+            selected == idx,
+            { onSelect(idx) }, { onSelect(-1) },
+            { editing = idx }, { deleting = idx }
+        ) {
+            Text(it.name(), Modifier.padding(5.dp))
+        }
+    }
+
+    if(showDialog) {
+        dialog("Assignment name", assignments.map{ it.name() }, { showDialog = false }, "", onAdd)
+    }
+    else if(editing != -1) {
+        AddStringDialog("Assignment name", assignments.map { it.name() }, { editing = -1 }, assignments[editing].name()) {
+            onUpdate(assignments[editing], it)
+        }
+    }
+    else if(deleting != -1) {
+        ConfirmDeleteDialog(
+            "an assignment",
+            { deleting = -1 },
+            { onDelete(assignments[deleting]) }
+        ) { Text(assignments[deleting].name()) }
+    }
 }
 
 @Composable
@@ -293,43 +369,4 @@ fun StudentDialog(
             }
         }
     }
-}
-
-@Composable
-fun GroupsWidget(
-    course: Course, edition: Edition, groups: List<Group>, selected: Int?, onSelect: (Int) -> Unit,
-    deleter: (Group) -> Unit, onAdd: (name: String) -> Unit, onUpdate: (Group, String) -> Unit
-) = EditionSideWidget(
-    course, edition, "Group list (${groups.size})", "groups", "a group", groups, selected, onSelect,
-    { Text(it.name, Modifier.padding(5.dp)) },
-    { current, onExit -> AddStringDialog("Group name", groups.map { it.name }, onExit, current.name) { onUpdate(current, it) } },
-    deleter
-) { onExit ->
-    AddStringDialog("Group name", groups.map { it.name }, onExit) { onAdd(it) }
-}
-
-@Composable
-fun AssignmentsWidget(
-    course: Course, edition: Edition, assignments: List<SoloAssignment>, selected: Int?,
-    onSelect: (Int) -> Unit, deleter: (SoloAssignment) -> Unit, onAdd: (name: String) -> Unit, onUpdate: (SoloAssignment, String) -> Unit
-) = EditionSideWidget(
-    course, edition, "Assignment list", "assignments", "an assignment", assignments, selected, onSelect,
-    { Text(it.name, Modifier.padding(5.dp)) },
-    { current, onExit -> AddStringDialog("Assignment title", assignments.map { it.name }, onExit, current.name) { onUpdate(current, it) } },
-    deleter
-) { onExit ->
-    AddStringDialog("Assignment title", assignments.map { it.name }, onExit) { onAdd(it) }
-}
-
-@Composable
-fun GroupAssignmentsWidget(
-    course: Course, edition: Edition, assignments: List<GroupAssignment>, selected: Int?,
-    onSelect: (Int) -> Unit, deleter: (GroupAssignment) -> Unit, onAdd: (name: String) -> Unit, onUpdate: (GroupAssignment, String) -> Unit
-) = EditionSideWidget(
-    course, edition, "Group assignment list", "group assignments", "an assignment", assignments, selected, onSelect,
-    { Text(it.name, Modifier.padding(5.dp)) },
-    { current, onExit -> AddStringDialog("Assignment title", assignments.map { it.name }, onExit, current.name) { onUpdate(current, it) } },
-    deleter
-) { onExit ->
-    AddStringDialog("Assignment title", assignments.map { it.name }, onExit) { onAdd(it) }
 }
