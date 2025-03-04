@@ -87,12 +87,18 @@ class EditionListState(val course: Course) {
     }
 }
 
+enum class OpenPanel(val tabName: String) {
+    Student("Students"), Group("Groups"), Assignment("Assignments")
+}
+
 class EditionState(val edition: Edition) {
     val course = transaction { edition.course }
     val students = RawDbState { edition.soloStudents.sortAsc(Students.name).toList() }
     val groups = RawDbState { edition.groups.sortAsc(Groups.name).toList() }
     val solo = RawDbState { edition.soloAssignments.sortAsc(SoloAssignments.name).toList() }
     val groupAs = RawDbState { edition.groupAssignments.sortAsc(GroupAssignments.name).toList() }
+    private val _history = mutableStateOf(listOf(-1 to OpenPanel.Assignment))
+    val history = _history.immutable()
 
     val availableStudents = RawDbState {
         Student.find {
@@ -216,6 +222,16 @@ class EditionState(val edition: Edition) {
     fun delete(assignment: Assignment) = when(assignment) {
         is Assignment.GAssignment -> delete(assignment.assignment)
         is Assignment.SAssignment -> delete(assignment.assignment)
+    }
+
+    fun navTo(panel: OpenPanel, id: Int = -1) {
+        _history.value += (id to panel)
+    }
+    fun navTo(id: Int) = navTo(_history.value.last().second, id)
+    fun back() {
+        var temp = _history.value.dropLast(1)
+        while(temp.last().first == -1 && temp.size >= 2) temp = temp.dropLast(1)
+        _history.value = temp
     }
 }
 

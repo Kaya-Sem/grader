@@ -17,8 +17,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.rememberDialogState
-import com.jaytux.grader.data.Group
-import com.jaytux.grader.data.Student
 import com.jaytux.grader.maxN
 import com.jaytux.grader.viewmodel.GroupState
 import com.jaytux.grader.viewmodel.StudentState
@@ -31,7 +29,6 @@ fun StudentView(state: StudentState, nav: Navigators) {
     val soloGrades by state.soloGrades.entities
 
     Column(Modifier.padding(10.dp)) {
-        PaneHeader(state.student.name, "student", state.editionCourse)
         Row {
             Column(Modifier.weight(0.45f)) {
                 Column(Modifier.padding(10.dp).weight(0.35f)) {
@@ -150,12 +147,10 @@ fun GroupView(state: GroupState, nav: Navigators) {
     val members by state.members.entities
     val available by state.availableStudents.entities
     val allRoles by state.roles.entities
-    val (course, edition) = state.course
 
     var pickRole: Pair<String?, (String?) -> Unit>? by remember { mutableStateOf(null) }
 
     Column(Modifier.padding(10.dp)) {
-        PaneHeader(state.group.name, "group", course, edition)
         Row {
             Column(Modifier.weight(0.5f)) {
                 Text("Students", style = MaterialTheme.typography.headlineSmall)

@@ -20,8 +20,6 @@ import com.mohamedrejeb.richeditor.ui.material3.OutlinedRichTextEditor
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GroupAssignmentView(state: GroupAssignmentState) {
-    val (course, edition) = state.editionCourse
-    val name by state.name
     val task by state.task
     val deadline by state.deadline
     val allFeedback by state.feedback.entities
@@ -29,7 +27,6 @@ fun GroupAssignmentView(state: GroupAssignmentState) {
     var idx by remember(state) { mutableStateOf(0) }
 
     Column(Modifier.padding(10.dp)) {
-        PaneHeader(name, "group assignment", course, edition)
         if(allFeedback.any { it.second.feedback == null }) {
             Text("Groups in bold have no feedback yet.", fontStyle = FontStyle.Italic)
         }
@@ -150,8 +147,6 @@ fun groupFeedback(state: GroupAssignmentState, fdbk: GroupAssignmentState.LocalG
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SoloAssignmentView(state: SoloAssignmentState) {
-    val name by state.name
-    val (course, edition) = state.editionCourse
     val task by state.task
     val deadline by state.deadline
     val suggestions by state.autofill.entities
@@ -160,7 +155,6 @@ fun SoloAssignmentView(state: SoloAssignmentState) {
     var idx by remember(state) { mutableStateOf(0) }
 
     Column(Modifier.padding(10.dp)) {
-        PaneHeader(name, "individual assignment", course, edition)
         Row {
             Surface(Modifier.weight(0.25f), tonalElevation = 10.dp) {
                 LazyColumn(Modifier.fillMaxHeight().padding(10.dp)) {

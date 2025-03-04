@@ -15,10 +15,6 @@ import androidx.compose.ui.window.*
 import com.jaytux.grader.data.*
 import com.jaytux.grader.viewmodel.*
 
-enum class OpenPanel(val tabName: String) {
-    Student("Students"), Group("Groups"), Assignment("Assignments")
-}
-
 data class Navigators(
     val student: (Student) -> Unit,
     val group: (Group) -> Unit,
@@ -36,41 +32,41 @@ fun EditionView(state: EditionState) = Row(Modifier.padding(0.dp)) {
     val mergedAssignments by remember(solo, groupAs) {
         mutableStateOf(Assignment.merge(groupAs, solo))
     }
-    var selected by remember { mutableStateOf(-1) }
-    var tab by remember { mutableStateOf(OpenPanel.Assignment) }
+    val hist by state.history
 
     val navs = Navigators(
-        student = { tab = OpenPanel.Student; selected = students.indexOfFirst { s -> s.id == it.id } },
-        group = { tab = OpenPanel.Group; selected = groups.indexOfFirst { g -> g.id == it.id } },
-        assignment = { tab = OpenPanel.Assignment; selected = mergedAssignments.indexOfFirst { a -> a.id() == it.id() } }
+        student = { state.navTo(OpenPanel.Student, students.indexOfFirst{ s -> s.id == it.id }) },
+        group = { state.navTo(OpenPanel.Group, groups.indexOfFirst { g -> g.id == it.id }) },
+        assignment = { state.navTo(OpenPanel.Assignment, mergedAssignments.indexOfFirst { a -> a.id() == it.id() }) }
     )
 
+    val (id, tab) = hist.last()
     Surface(Modifier.weight(0.25f), tonalElevation = 5.dp) {
         TabLayout(
             OpenPanel.entries,
             tab.ordinal,
-            { tab = OpenPanel.entries[it]; selected = -1 },
+            { state.navTo(OpenPanel.entries[it]) },
             { Text(it.tabName) }
         ) {
             when(tab) {
                 OpenPanel.Student -> StudentPanel(
-                    course, edition, students, availableStudents, selected,
-                    { selected = it },
+                    course, edition, students, availableStudents, id,
+                    { state.navTo(it) },
                     { name, note, contact, add -> state.newStudent(name, contact, note, add) },
                     { students -> state.addToCourse(students) },
                     { s, name -> state.setStudentName(s, name) }
                 ) { s -> state.delete(s) }
 
                 OpenPanel.Group -> GroupPanel(
-                    course, edition, groups, selected,
-                    { selected = it },
+                    course, edition, groups, id,
+                    { state.navTo(it) },
                     { name -> state.newGroup(name) },
                     { g, name -> state.setGroupName(g, name) }
                 ) { g -> state.delete(g) }
 
                 OpenPanel.Assignment -> AssignmentPanel(
-                    course, edition, mergedAssignments, selected,
-                    { selected = it },
+                    course, edition, mergedAssignments, id,
+                    { state.navTo(it) },
                     { type, name -> state.newAssignment(type, name) },
                     { a, name -> state.setAssignmentTitle(a, name) }
                 ) { a -> state.delete(a) }
@@ -78,15 +74,36 @@ fun EditionView(state: EditionState) = Row(Modifier.padding(0.dp)) {
         }
     }
 
-    Box(Modifier.weight(0.75f)) {
-        if(selected != -1) {
+    Column(Modifier.weight(0.75f)) {
+        Row {
+            IconButton({ state.back() }, enabled = hist.size >= 2) {
+                Icon(ChevronLeft, "Back", Modifier.size(MaterialTheme.typography.headlineMedium.fontSize.toDp()).align(Alignment.CenterVertically))
+            }
             when(tab) {
-                OpenPanel.Student -> StudentView(StudentState(students[selected], edition), navs)
-                OpenPanel.Group -> GroupView(GroupState(groups[selected]), navs)
+                OpenPanel.Student -> {
+                    if(id == -1) PaneHeader("Nothing selected", "students", course, edition)
+                    else PaneHeader(students[id].name, "student", course, edition)
+                }
+                OpenPanel.Group -> {
+                    if(id == -1) PaneHeader("Nothing selected", "groups", course, edition)
+                    else PaneHeader(groups[id].name, "group", course, edition)
+                }
                 OpenPanel.Assignment -> {
-                    when(val a = mergedAssignments[selected]) {
-                        is Assignment.SAssignment -> SoloAssignmentView(SoloAssignmentState(a.assignment))
-                        is Assignment.GAssignment -> GroupAssignmentView(GroupAssignmentState(a.assignment))
+                    if(id == -1) PaneHeader("Nothing selected", "assignments", course, edition)
+                    else PaneHeader(mergedAssignments[id].name(), "assignment", course, edition)
+                }
+            }
+        }
+        Box(Modifier.weight(1f)) {
+            if (id != -1) {
+                when (tab) {
+                    OpenPanel.Student -> StudentView(StudentState(students[id], edition), navs)
+                    OpenPanel.Group -> GroupView(GroupState(groups[id]), navs)
+                    OpenPanel.Assignment -> {
+                        when (val a = mergedAssignments[id]) {
+                            is Assignment.SAssignment -> SoloAssignmentView(SoloAssignmentState(a.assignment))
+                            is Assignment.GAssignment -> GroupAssignmentView(GroupAssignmentState(a.assignment))
+                        }
                     }
                 }
             }
