@@ -53,6 +53,7 @@ object EditionStudents : Table("editionStudents") {
 
 object GroupAssignments : UUIDTable("grpAssgmts") {
     val editionId = reference("edition_id", Editions.id)
+    val number = integer("number").nullable()
     val name = varchar("name", 50)
     val assignment = text("assignment")
     val deadline = datetime("deadline")
@@ -60,6 +61,7 @@ object GroupAssignments : UUIDTable("grpAssgmts") {
 
 object SoloAssignments : UUIDTable("soloAssgmts") {
     val editionId = reference("edition_id", Editions.id)
+    val number = integer("number").nullable()
     val name = varchar("name", 50)
     val assignment = text("assignment")
     val deadline = datetime("deadline")

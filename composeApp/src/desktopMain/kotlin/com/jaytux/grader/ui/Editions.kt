@@ -4,6 +4,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -11,8 +16,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.*
-import com.jaytux.grader.data.*
+import androidx.compose.ui.window.DialogWindow
+import androidx.compose.ui.window.WindowPosition
+import androidx.compose.ui.window.rememberDialogState
+import com.jaytux.grader.data.Course
+import com.jaytux.grader.data.Edition
+import com.jaytux.grader.data.Group
+import com.jaytux.grader.data.Student
 import com.jaytux.grader.viewmodel.*
 
 data class Navigators(
@@ -29,9 +39,7 @@ fun EditionView(state: EditionState) = Row(Modifier.padding(0.dp)) {
     val groups by state.groups.entities
     val solo by state.solo.entities
     val groupAs by state.groupAs.entities
-    val mergedAssignments by remember(solo, groupAs) {
-        mutableStateOf(Assignment.merge(groupAs, solo))
-    }
+    val mergedAssignments by remember(solo, groupAs) { mutableStateOf(Assignment.merge(groupAs, solo)) }
     val hist by state.history
 
     val navs = Navigators(
@@ -68,7 +76,8 @@ fun EditionView(state: EditionState) = Row(Modifier.padding(0.dp)) {
                     course, edition, mergedAssignments, id,
                     { state.navTo(it) },
                     { type, name -> state.newAssignment(type, name) },
-                    { a, name -> state.setAssignmentTitle(a, name) }
+                    { a, name -> state.setAssignmentTitle(a, name) },
+                    { a1, a2 -> state.swapOrder(a1, a2) }
                 ) { a -> state.delete(a) }
             }
         }
@@ -90,7 +99,12 @@ fun EditionView(state: EditionState) = Row(Modifier.padding(0.dp)) {
                 }
                 OpenPanel.Assignment -> {
                     if(id == -1) PaneHeader("Nothing selected", "assignments", course, edition)
-                    else PaneHeader(mergedAssignments[id].name(), "assignment", course, edition)
+                    else {
+                        when(val a = mergedAssignments[id]) {
+                            is Assignment.SAssignment -> PaneHeader(a.name(), "individual assignment", course, edition)
+                            is Assignment.GAssignment -> PaneHeader(a.name(), "group assignment", course, edition)
+                        }
+                    }
                 }
             }
         }
@@ -211,7 +225,7 @@ fun AssignmentPanel(
     course: Course, edition: Edition, assignments: List<Assignment>,
     selected: Int, onSelect: (Int) -> Unit,
     onAdd: (AssignmentType, String) -> Unit, onUpdate: (Assignment, String) -> Unit,
-    onDelete: (Assignment) -> Unit
+    onSwapOrder: (Assignment, Assignment) -> Unit, onDelete: (Assignment) -> Unit
 ) = Column(Modifier.padding(10.dp)) {
     var showDialog by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(-1) }
@@ -264,12 +278,25 @@ fun AssignmentPanel(
         { Text("Add an assignment") },
         { showDialog = true }
     ) { idx, it ->
-        SelectEditDeleteRow(
+        Selectable(
             selected == idx,
-            { onSelect(idx) }, { onSelect(-1) },
-            { editing = idx }, { deleting = idx }
+            { onSelect(idx) }, { onSelect(-1) }
         ) {
-            Text(it.name(), Modifier.padding(5.dp))
+            Row {
+                Text(it.name(), Modifier.padding(5.dp).align(Alignment.CenterVertically).weight(1f))
+                Column(Modifier.padding(2.dp)) {
+                    Icon(Icons.Default.ArrowUpward, "Move up", Modifier.clickable {
+                        if(idx > 0) onSwapOrder(assignments[idx], assignments[idx - 1])
+                    })
+                    Icon(Icons.Default.ArrowDownward, "Move down", Modifier.clickable {
+                        if(idx < assignments.size - 1) onSwapOrder(assignments[idx], assignments[idx + 1])
+                    })
+                }
+                Column(Modifier.padding(2.dp)) {
+                    Icon(Icons.Default.Edit, "Edit", Modifier.clickable { editing = idx })
+                    Icon(Icons.Default.Delete, "Delete", Modifier.clickable { deleting = idx })
+                }
+            }
         }
     }
 

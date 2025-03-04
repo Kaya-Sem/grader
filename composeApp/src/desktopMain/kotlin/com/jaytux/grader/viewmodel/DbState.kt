@@ -13,6 +13,7 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
+import kotlin.math.max
 
 fun <T> MutableState<T>.immutable(): State<T> = this
 fun <T> SizedIterable<T>.sortAsc(vararg columns: Expression<*>) = this.orderBy(*(columns.map { it to SortOrder.ASC }.toTypedArray()))
@@ -22,14 +23,17 @@ sealed class Assignment {
     class GAssignment(val assignment: GroupAssignment) : Assignment() {
         override fun name(): String = assignment.name
         override fun id(): EntityID<UUID> = assignment.id
+        override fun index(): Int? = assignment.number
     }
     class SAssignment(val assignment: SoloAssignment) : Assignment() {
         override fun name(): String = assignment.name
         override fun id(): EntityID<UUID> = assignment.id
+        override fun index(): Int? = assignment.number
     }
 
     abstract fun name(): String
     abstract fun id(): EntityID<UUID>
+    abstract fun index(): Int?
 
     companion object {
         fun from(assignment: GroupAssignment) = GAssignment(assignment)
@@ -38,9 +42,7 @@ sealed class Assignment {
         fun merge(groups: List<GroupAssignment>, solos: List<SoloAssignment>): List<Assignment> {
             val g = groups.map { from(it) }
             val s = solos.map { from(it) }
-            return (g + s).sortedBy {
-                (it as? GAssignment)?.assignment?.name ?: (it as SAssignment).assignment.name
-            }
+            return (g + s).sortedWith(compareBy<Assignment> { it.index() }.thenBy { it.name() })
         }
     }
 }
@@ -153,9 +155,17 @@ class EditionState(val edition: Edition) {
         return instant.toLocalDateTime(TimeZone.currentSystemDefault())
     }
 
+    private fun nextIdx(): Int = max(
+        solo.entities.value.maxOfOrNull { it.number ?: 0 } ?: 0,
+        groupAs.entities.value.maxOfOrNull { it.number ?: 0 } ?: 0
+    ) + 1
+
     fun newSoloAssignment(name: String) {
         transaction {
-            SoloAssignment.new { this.name = name; this.edition = this@EditionState.edition; assignment = ""; deadline = now() }
+            SoloAssignment.new {
+                this.name = name; this.edition = this@EditionState.edition; assignment = ""; deadline = now()
+                this.number = nextIdx()
+            }
             solo.refresh()
         }
     }
@@ -167,7 +177,10 @@ class EditionState(val edition: Edition) {
     }
     fun newGroupAssignment(name: String) {
         transaction {
-            GroupAssignment.new { this.name = name; this.edition = this@EditionState.edition; assignment = ""; deadline = now() }
+            GroupAssignment.new {
+                this.name = name; this.edition = this@EditionState.edition; assignment = ""; deadline = now()
+                this.number = nextIdx()
+            }
             groupAs.refresh()
         }
     }
@@ -185,6 +198,42 @@ class EditionState(val edition: Edition) {
     fun setAssignmentTitle(assignment: Assignment, title: String) = when(assignment) {
         is Assignment.GAssignment -> setGroupAssignmentTitle(assignment.assignment, title)
         is Assignment.SAssignment -> setSoloAssignmentTitle(assignment.assignment, title)
+    }
+
+    fun swapOrder(a1: Assignment, a2: Assignment) {
+        transaction {
+            when(a1) {
+                is Assignment.GAssignment -> {
+                    when(a2) {
+                        is Assignment.GAssignment -> {
+                            val temp = a1.assignment.number
+                            a1.assignment.number = a2.assignment.number
+                            a2.assignment.number = temp
+                        }
+                        is Assignment.SAssignment -> {
+                            val temp = a1.assignment.number
+                            a1.assignment.number = nextIdx()
+                            a2.assignment.number = temp
+                        }
+                    }
+                }
+                is Assignment.SAssignment -> {
+                    when(a2) {
+                        is Assignment.GAssignment -> {
+                            val temp = a1.assignment.number
+                            a1.assignment.number = a2.assignment.number
+                            a2.assignment.number = temp
+                        }
+                        is Assignment.SAssignment -> {
+                            val temp = a1.assignment.number
+                            a1.assignment.number = a2.assignment.number
+                            a2.assignment.number = temp
+                        }
+                    }
+                }
+            }
+        }
+        solo.refresh(); groupAs.refresh()
     }
 
     fun delete(s: Student) {

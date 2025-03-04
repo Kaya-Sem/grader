@@ -10,9 +10,8 @@ import java.util.UUID
 class Course(id: EntityID<UUID>) : Entity<UUID>(id) {
     companion object : EntityClass<UUID, Course>(Courses)
 
-    fun loadEditions() = transaction { Edition.find { Editions.courseId eq this@Course.id }.toList() }
-
     var name by Courses.name
+    val editions by Edition referrersOn Editions.courseId
 }
 
 class Edition(id: EntityID<UUID>) : Entity<UUID>(id) {
@@ -57,6 +56,7 @@ class GroupAssignment(id: EntityID<UUID>) : Entity<UUID>(id) {
     companion object : EntityClass<UUID, GroupAssignment>(GroupAssignments)
 
     var edition by Edition referencedOn GroupAssignments.editionId
+    var number by GroupAssignments.number
     var name by GroupAssignments.name
     var assignment by GroupAssignments.assignment
     var deadline by GroupAssignments.deadline
@@ -66,6 +66,7 @@ class SoloAssignment(id: EntityID<UUID>) : Entity<UUID>(id) {
     companion object : EntityClass<UUID, SoloAssignment>(SoloAssignments)
 
     var edition by Edition referencedOn SoloAssignments.editionId
+    var number by SoloAssignments.number
     var name by SoloAssignments.name
     var assignment by SoloAssignments.assignment
     var deadline by SoloAssignments.deadline

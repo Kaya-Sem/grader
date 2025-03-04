@@ -376,15 +376,26 @@ fun ItalicAndNormal(italic: String, normal: String) = Row{
 }
 
 @Composable
+fun Selectable(
+    isSelected: Boolean,
+    onSelect: () -> Unit, onDeselect: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Surface(
+        Modifier.fillMaxWidth().clickable { if(isSelected) onDeselect() else onSelect() },
+        tonalElevation = if (isSelected) 50.dp else 0.dp,
+        shape = MaterialTheme.shapes.medium
+    ) {
+        content()
+    }
+}
+
+@Composable
 fun SelectEditDeleteRow(
     isSelected: Boolean,
     onSelect: () -> Unit, onDeselect: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit,
     content: @Composable BoxScope.() -> Unit
-) = Surface(
-            Modifier.fillMaxWidth().clickable { if(isSelected) onDeselect() else onSelect() },
-            tonalElevation = if (isSelected) 50.dp else 0.dp,
-            shape = MaterialTheme.shapes.medium
-        ) {
+)  = Selectable(isSelected, onSelect, onDeselect) {
     Row {
         Box(Modifier.weight(1f).align(Alignment.CenterVertically)) { content() }
         IconButton(onEdit, Modifier.align(Alignment.CenterVertically)) {
