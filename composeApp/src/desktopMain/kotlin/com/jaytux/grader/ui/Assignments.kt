@@ -205,8 +205,8 @@ fun SoloAssignmentView(state: SoloAssignmentState) {
                     ) { state.updateTask(updTask.toMarkdown()) }
                 } else {
                     val (student, fg) = grades[idx - 1]
-                    var sGrade by remember { mutableStateOf(fg?.grade ?: "") }
-                    var sMsg by remember { mutableStateOf(TextFieldValue(fg?.feedback ?: "")) }
+                    var sGrade by remember(idx) { mutableStateOf(fg?.grade ?: "") }
+                    var sMsg by remember(idx) { mutableStateOf(TextFieldValue(fg?.feedback ?: "")) }
                     Row {
                         Text("Grade: ", Modifier.align(Alignment.CenterVertically))
                         OutlinedTextField(sGrade, { sGrade = it }, Modifier.weight(0.2f))

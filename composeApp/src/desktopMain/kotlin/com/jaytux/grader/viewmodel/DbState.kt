@@ -514,7 +514,7 @@ class SoloAssignmentState(val assignment: SoloAssignment) {
                 it[this.grade] = grd
             }
         }
-        feedback.refresh()
+        feedback.refresh(); autofill.refresh()
     }
 
     fun updateTask(t: String) {
