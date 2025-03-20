@@ -1,12 +1,10 @@
 package com.jaytux.grader.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyItemScope
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
@@ -15,20 +13,27 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.capitalize
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.intl.Locale
-import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.*
 import com.jaytux.grader.data.Course
 import com.jaytux.grader.data.Edition
+import com.jaytux.grader.viewmodel.PeerEvaluationState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.*
@@ -379,11 +384,12 @@ fun ItalicAndNormal(italic: String, normal: String) = Row{
 fun Selectable(
     isSelected: Boolean,
     onSelect: () -> Unit, onDeselect: () -> Unit,
+    unselectedElevation: Dp = 0.dp, selectedElevation: Dp = 50.dp,
     content: @Composable () -> Unit
 ) {
     Surface(
         Modifier.fillMaxWidth().clickable { if(isSelected) onDeselect() else onSelect() },
-        tonalElevation = if (isSelected) 50.dp else 0.dp,
+        tonalElevation = if (isSelected) selectedElevation else unselectedElevation,
         shape = MaterialTheme.shapes.medium
     ) {
         content()
@@ -405,4 +411,47 @@ fun SelectEditDeleteRow(
             Icon(Icons.Default.Delete, "Delete")
         }
     }
+}
+
+@Composable
+fun FromTo(size: Dp) {
+    Box(Modifier.width(size).height(size)) {
+        Box(Modifier.align(Alignment.BottomStart)) {
+            Text("Evaluator", fontWeight = FontWeight.Bold)
+        }
+
+        Box(
+            Modifier.align(Alignment.TopEnd)
+        ) {
+            Text("Evaluated", Modifier.graphicsLayer {
+                rotationZ = -90f
+                transformOrigin = TransformOrigin(0f, 0.5f)
+                translationX = size.value / 2f - 15f
+                translationY = size.value - 15f
+            }, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+fun PEGradeWidget(
+    grade: PeerEvaluationState.Student2StudentEntry?,
+    onSelect: () -> Unit, onDeselect: () -> Unit,
+    isSelected: Boolean,
+    modifier: Modifier = Modifier
+) = Box(modifier.padding(2.dp)) {
+    Selectable(isSelected, onSelect, onDeselect) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(grade?.let { if(it.grade.isNotBlank()) it.grade else if(it.feedback.isNotBlank()) "n/a" else null } ?: "none")
+        }
+    }
+}
+
+@Composable
+fun VLine(width: Dp = 1.dp, color: Color = Color.Black) = Spacer(Modifier.fillMaxHeight().width(width).background(color))
+
+@Composable
+fun MeasuredLazyItemScope.HLine(height: Dp = 1.dp, color: Color = Color.Black) {
+    val width by measuredWidth()
+    Spacer(Modifier.width(width).height(height).background(color))
 }

@@ -23,6 +23,7 @@ class Edition(id: EntityID<UUID>) : Entity<UUID>(id) {
     val soloStudents by Student via EditionStudents
     val soloAssignments by SoloAssignment referrersOn SoloAssignments.editionId
     val groupAssignments by GroupAssignment referrersOn GroupAssignments.editionId
+    val peerEvaluations by PeerEvaluation referrersOn PeerEvaluations.editionId
 }
 
 class Group(id: EntityID<UUID>) : Entity<UUID>(id) {
@@ -72,29 +73,10 @@ class SoloAssignment(id: EntityID<UUID>) : Entity<UUID>(id) {
     var deadline by SoloAssignments.deadline
 }
 
-class GroupFeedback(id: EntityID<CompositeID>) : Entity<CompositeID>(id) {
-    companion object : EntityClass<CompositeID, GroupFeedback>(GroupFeedbacks)
+class PeerEvaluation(id: EntityID<UUID>) : Entity<UUID>(id) {
+    companion object : EntityClass<UUID, PeerEvaluation>(PeerEvaluations)
 
-    var group by Group referencedOn GroupFeedbacks.groupId
-    var assignment by GroupAssignment referencedOn GroupFeedbacks.groupAssignmentId
-    var feedback by GroupFeedbacks.feedback
-    var grade by GroupFeedbacks.grade
-}
-
-class IndividualFeedback(id: EntityID<CompositeID>) : Entity<CompositeID>(id) {
-    companion object : EntityClass<CompositeID, IndividualFeedback>(IndividualFeedbacks)
-
-    var student by Student referencedOn IndividualFeedbacks.studentId
-    var assignment by SoloAssignment referencedOn IndividualFeedbacks.groupAssignmentId
-    var feedback by IndividualFeedbacks.feedback
-    var grade by IndividualFeedbacks.grade
-}
-
-class SoloFeedback(id: EntityID<CompositeID>) : Entity<CompositeID>(id) {
-    companion object : EntityClass<CompositeID, SoloFeedback>(SoloFeedbacks)
-
-    var student by Student referencedOn SoloFeedbacks.studentId
-    var assignment by SoloAssignment referencedOn SoloFeedbacks.soloAssignmentId
-    var feedback by SoloFeedbacks.feedback
-    var grade by SoloFeedbacks.grade
+    var edition by Edition referencedOn PeerEvaluations.editionId
+    var number by PeerEvaluations.number
+    var name by PeerEvaluations.name
 }

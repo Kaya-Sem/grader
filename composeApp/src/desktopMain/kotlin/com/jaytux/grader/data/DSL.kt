@@ -67,6 +67,12 @@ object SoloAssignments : UUIDTable("soloAssgmts") {
     val deadline = datetime("deadline")
 }
 
+object PeerEvaluations : UUIDTable("peerEvals") {
+    val editionId = reference("edition_id", Editions.id)
+    val number = integer("number").nullable()
+    val name = varchar("name", 50)
+}
+
 object GroupFeedbacks : CompositeIdTable("grpFdbks") {
     val groupAssignmentId = reference("group_assignment_id", GroupAssignments.id)
     val groupId = reference("group_id", Groups.id)
@@ -93,4 +99,31 @@ object SoloFeedbacks : CompositeIdTable("soloFdbks") {
     val grade = varchar("grade", 32)
 
     override val primaryKey = PrimaryKey(soloAssignmentId, studentId)
+}
+
+object PeerEvaluationContents : CompositeIdTable("peerEvalCnts") {
+    val peerEvaluationId = reference("peer_evaluation_id", PeerEvaluations.id)
+    val groupId = reference("group_id", Groups.id)
+    val content = text("content")
+
+    override val primaryKey = PrimaryKey(peerEvaluationId, groupId)
+}
+
+object StudentToGroupEvaluation : CompositeIdTable("stToGrEv") {
+    val peerEvaluationId = reference("peer_evaluation_id", PeerEvaluations.id)
+    val studentId = reference("student_id", Students.id)
+    val grade = varchar("grade", 32)
+    val note = text("note")
+
+    override val primaryKey = PrimaryKey(peerEvaluationId)
+}
+
+object StudentToStudentEvaluation : CompositeIdTable("stToStEv") {
+    val peerEvaluationId = reference("peer_evaluation_id", PeerEvaluations.id)
+    val studentIdFrom = reference("student_id_from", Students.id)
+    val studentIdTo = reference("student_id_to", Students.id)
+    val grade = varchar("grade", 32)
+    val note = text("note")
+
+    override val primaryKey = PrimaryKey(peerEvaluationId, studentIdFrom, studentIdTo)
 }

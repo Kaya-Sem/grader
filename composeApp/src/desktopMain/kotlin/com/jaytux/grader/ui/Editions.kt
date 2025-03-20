@@ -39,7 +39,8 @@ fun EditionView(state: EditionState) = Row(Modifier.padding(0.dp)) {
     val groups by state.groups.entities
     val solo by state.solo.entities
     val groupAs by state.groupAs.entities
-    val mergedAssignments by remember(solo, groupAs) { mutableStateOf(Assignment.merge(groupAs, solo)) }
+    val peers by state.peer.entities
+    val mergedAssignments by remember(solo, groupAs, peers) { mutableStateOf(Assignment.merge(groupAs, solo, peers)) }
     val hist by state.history
 
     val navs = Navigators(
@@ -103,6 +104,7 @@ fun EditionView(state: EditionState) = Row(Modifier.padding(0.dp)) {
                         when(val a = mergedAssignments[id]) {
                             is Assignment.SAssignment -> PaneHeader(a.name(), "individual assignment", course, edition)
                             is Assignment.GAssignment -> PaneHeader(a.name(), "group assignment", course, edition)
+                            is Assignment.PeerEval -> PaneHeader(a.name(), "peer evaluation", course, edition)
                         }
                     }
                 }
@@ -117,6 +119,7 @@ fun EditionView(state: EditionState) = Row(Modifier.padding(0.dp)) {
                         when (val a = mergedAssignments[id]) {
                             is Assignment.SAssignment -> SoloAssignmentView(SoloAssignmentState(a.assignment))
                             is Assignment.GAssignment -> GroupAssignmentView(GroupAssignmentState(a.assignment))
+                            is Assignment.PeerEval -> PeerEvaluationView(PeerEvaluationState(a.evaluation))
                         }
                     }
                 }
@@ -245,7 +248,7 @@ fun AssignmentPanel(
                         AssignmentType.entries,
                         tab.ordinal,
                         { tab = AssignmentType.entries[it] },
-                        { Text(it.name) }
+                        { Text(it.show) }
                     ) {
                         Box(Modifier.fillMaxSize().padding(10.dp)) {
                             Column(Modifier.align(Alignment.Center)) {

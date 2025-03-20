@@ -18,7 +18,7 @@ import kotlin.math.max
 fun <T> MutableState<T>.immutable(): State<T> = this
 fun <T> SizedIterable<T>.sortAsc(vararg columns: Expression<*>) = this.orderBy(*(columns.map { it to SortOrder.ASC }.toTypedArray()))
 
-enum class AssignmentType { Solo, Group }
+enum class AssignmentType(val show: String) { Solo("Solo Assignment"), Group("Group Assignment"), Peer("Peer Evaluation") }
 sealed class Assignment {
     class GAssignment(val assignment: GroupAssignment) : Assignment() {
         override fun name(): String = assignment.name
@@ -30,6 +30,11 @@ sealed class Assignment {
         override fun id(): EntityID<UUID> = assignment.id
         override fun index(): Int? = assignment.number
     }
+    class PeerEval(val evaluation: com.jaytux.grader.data.PeerEvaluation) : Assignment() {
+        override fun name(): String = evaluation.name
+        override fun id(): EntityID<UUID> = evaluation.id
+        override fun index(): Int? = evaluation.number
+    }
 
     abstract fun name(): String
     abstract fun id(): EntityID<UUID>
@@ -38,11 +43,13 @@ sealed class Assignment {
     companion object {
         fun from(assignment: GroupAssignment) = GAssignment(assignment)
         fun from(assignment: SoloAssignment) = SAssignment(assignment)
+        fun from(pEval: PeerEvaluation) = PeerEval(pEval)
 
-        fun merge(groups: List<GroupAssignment>, solos: List<SoloAssignment>): List<Assignment> {
+        fun merge(groups: List<GroupAssignment>, solos: List<SoloAssignment>, peers: List<PeerEvaluation>): List<Assignment> {
             val g = groups.map { from(it) }
             val s = solos.map { from(it) }
-            return (g + s).sortedWith(compareBy<Assignment> { it.index() }.thenBy { it.name() })
+            val p = peers.map { from(it) }
+            return (g + s + p).sortedWith(compareBy<Assignment> { it.index() }.thenBy { it.name() })
         }
     }
 }
@@ -99,6 +106,7 @@ class EditionState(val edition: Edition) {
     val groups = RawDbState { edition.groups.sortAsc(Groups.name).toList() }
     val solo = RawDbState { edition.soloAssignments.sortAsc(SoloAssignments.name).toList() }
     val groupAs = RawDbState { edition.groupAssignments.sortAsc(GroupAssignments.name).toList() }
+    val peer = RawDbState { edition.peerEvaluations.sortAsc(PeerEvaluations.name).toList() }
     private val _history = mutableStateOf(listOf(-1 to OpenPanel.Assignment))
     val history = _history.immutable()
 
@@ -190,14 +198,31 @@ class EditionState(val edition: Edition) {
         }
         groupAs.refresh()
     }
+    fun newPeerEvaluation(name: String) {
+        transaction {
+            PeerEvaluation.new {
+                this.name = name; this.edition = this@EditionState.edition
+                this.number = nextIdx()
+            }
+            peer.refresh()
+        }
+    }
+    fun setPeerEvaluationTitle(assignment: PeerEvaluation, title: String) {
+        transaction {
+            assignment.name = title
+        }
+        peer.refresh()
+    }
 
     fun newAssignment(type: AssignmentType, name: String) = when(type) {
         AssignmentType.Solo -> newSoloAssignment(name)
         AssignmentType.Group -> newGroupAssignment(name)
+        AssignmentType.Peer -> newPeerEvaluation(name)
     }
     fun setAssignmentTitle(assignment: Assignment, title: String) = when(assignment) {
         is Assignment.GAssignment -> setGroupAssignmentTitle(assignment.assignment, title)
         is Assignment.SAssignment -> setSoloAssignmentTitle(assignment.assignment, title)
+        is Assignment.PeerEval -> setPeerEvaluationTitle(assignment.evaluation, title)
     }
 
     fun swapOrder(a1: Assignment, a2: Assignment) {
@@ -215,6 +240,11 @@ class EditionState(val edition: Edition) {
                             a1.assignment.number = nextIdx()
                             a2.assignment.number = temp
                         }
+                        is Assignment.PeerEval -> {
+                            val temp = a1.assignment.number
+                            a1.assignment.number = nextIdx()
+                            a2.evaluation.number = temp
+                        }
                     }
                 }
                 is Assignment.SAssignment -> {
@@ -228,6 +258,30 @@ class EditionState(val edition: Edition) {
                             val temp = a1.assignment.number
                             a1.assignment.number = a2.assignment.number
                             a2.assignment.number = temp
+                        }
+                        is Assignment.PeerEval -> {
+                            val temp = a1.assignment.number
+                            a1.assignment.number = nextIdx()
+                            a2.evaluation.number = temp
+                        }
+                    }
+                }
+                is Assignment.PeerEval -> {
+                    when(a2) {
+                        is Assignment.GAssignment -> {
+                            val temp = a1.evaluation.number
+                            a1.evaluation.number = a2.assignment.number
+                            a2.assignment.number = temp
+                        }
+                        is Assignment.SAssignment -> {
+                            val temp = a1.evaluation.number
+                            a1.evaluation.number = a2.assignment.number
+                            a2.assignment.number = temp
+                        }
+                        is Assignment.PeerEval -> {
+                            val temp = a1.evaluation.number
+                            a1.evaluation.number = a2.evaluation.number
+                            a2.evaluation.number = temp
                         }
                     }
                 }
@@ -268,9 +322,18 @@ class EditionState(val edition: Edition) {
         }
         groupAs.refresh()
     }
+    fun delete(pe: PeerEvaluation) {
+        transaction {
+            PeerEvaluationContents.deleteWhere { peerEvaluationId eq pe.id }
+            StudentToStudentEvaluation.deleteWhere { peerEvaluationId eq pe.id }
+            pe.delete()
+        }
+        peer.refresh()
+    }
     fun delete(assignment: Assignment) = when(assignment) {
         is Assignment.GAssignment -> delete(assignment.assignment)
         is Assignment.SAssignment -> delete(assignment.assignment)
+        is Assignment.PeerEval -> delete(assignment.evaluation)
     }
 
     fun navTo(panel: OpenPanel, id: Int = -1) {
@@ -532,6 +595,85 @@ class SoloAssignmentState(val assignment: SoloAssignment) {
     }
 }
 
+class PeerEvaluationState(val evaluation: PeerEvaluation) {
+    data class Student2StudentEntry(val grade: String, val feedback: String)
+    data class StudentEntry(val student: Student, val global: Student2StudentEntry?, val others: List<Pair<Student, Student2StudentEntry?>>)
+    data class GroupEntry(val group: Group, val content: String, val students: List<StudentEntry>)
+    val editionCourse = transaction { evaluation.edition.course to evaluation.edition }
+    private val _name = mutableStateOf(evaluation.name); val name = _name.immutable()
+    val contents = RawDbState { loadContents() }
+
+    private fun Transaction.loadContents(): List<GroupEntry> {
+        val found = PeerEvaluationContents.selectAll().where {
+            PeerEvaluationContents.peerEvaluationId eq evaluation.id
+        }.associate { gc ->
+            val group = Group[gc[PeerEvaluationContents.groupId]]
+            val content = gc[PeerEvaluationContents.content]
+            val students = group.students.map { student1 ->
+                val others = group.students.map { student2 ->
+                    val eval = StudentToStudentEvaluation.selectAll().where {
+                        StudentToStudentEvaluation.peerEvaluationId eq evaluation.id and
+                        (StudentToStudentEvaluation.studentIdTo eq student1.id) and
+                        (StudentToStudentEvaluation.studentIdFrom eq student2.id)
+                    }.firstOrNull()
+                    student2 to eval?.let {
+                        Student2StudentEntry(
+                            it[StudentToStudentEvaluation.grade], it[StudentToStudentEvaluation.note]
+                        )
+                    }
+                }.sortedBy { it.first.name }
+                val global = StudentToGroupEvaluation.selectAll().where {
+                    StudentToGroupEvaluation.peerEvaluationId eq evaluation.id and
+                    (StudentToGroupEvaluation.studentId eq student1.id)
+                }.firstOrNull()?.let {
+                    Student2StudentEntry(it[StudentToGroupEvaluation.grade], it[StudentToGroupEvaluation.note])
+                }
+
+                StudentEntry(student1, global, others)
+            }.sortedBy { it.student.name } // enforce synchronized order
+
+            group to GroupEntry(group, content, students)
+        }
+
+        return editionCourse.second.groups.map {
+            found[it] ?: GroupEntry(
+                it, "",
+                it.students.map { s1 -> StudentEntry(s1, null, it.students.map { s2 -> s2 to null }) }
+            )
+        }
+    }
+
+    fun upsertGroupFeedback(group: Group, feedback: String) {
+        transaction {
+            PeerEvaluationContents.upsert {
+                it[peerEvaluationId] = evaluation.id
+                it[groupId] = group.id
+                it[this.content] = feedback
+            }
+        }
+        contents.refresh()
+    }
+
+    fun upsertIndividualFeedback(from: Student, to: Student?, grade: String, feedback: String) {
+        transaction {
+            to?.let {
+                StudentToStudentEvaluation.upsert {
+                    it[peerEvaluationId] = evaluation.id
+                    it[studentIdFrom] = from.id
+                    it[studentIdTo] = to.id
+                    it[this.grade] = grade
+                    it[this.note] = feedback
+                }
+            } ?: StudentToGroupEvaluation.upsert {
+                it[peerEvaluationId] = evaluation.id
+                it[studentId] = from.id
+                it[this.grade] = grade
+                it[this.note] = feedback
+            }
+        }
+        contents.refresh()
+    }
+}
 
 
 

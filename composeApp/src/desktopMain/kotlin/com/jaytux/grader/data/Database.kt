@@ -12,14 +12,18 @@ object Database {
                 Courses, Editions, Groups,
                 Students, GroupStudents, EditionStudents,
                 GroupAssignments, SoloAssignments,
-                GroupFeedbacks, IndividualFeedbacks, SoloFeedbacks
+                GroupFeedbacks, IndividualFeedbacks, SoloFeedbacks,
+                PeerEvaluations, PeerEvaluationContents, StudentToStudentEvaluation,
+                StudentToGroupEvaluation
             )
 
             val addMissing = SchemaUtils.addMissingColumnsStatements(
                 Courses, Editions, Groups,
                 Students, GroupStudents, EditionStudents,
                 GroupAssignments, SoloAssignments,
-                GroupFeedbacks, IndividualFeedbacks, SoloFeedbacks
+                GroupFeedbacks, IndividualFeedbacks, SoloFeedbacks,
+                PeerEvaluations, PeerEvaluationContents, StudentToStudentEvaluation,
+                StudentToGroupEvaluation
             )
             addMissing.forEach { exec(it) }
         }
