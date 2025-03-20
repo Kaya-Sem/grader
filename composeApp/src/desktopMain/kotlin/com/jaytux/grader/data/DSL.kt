@@ -115,7 +115,7 @@ object StudentToGroupEvaluation : CompositeIdTable("stToGrEv") {
     val grade = varchar("grade", 32)
     val note = text("note")
 
-    override val primaryKey = PrimaryKey(peerEvaluationId)
+    override val primaryKey = PrimaryKey(peerEvaluationId, studentId)
 }
 
 object StudentToStudentEvaluation : CompositeIdTable("stToStEv") {

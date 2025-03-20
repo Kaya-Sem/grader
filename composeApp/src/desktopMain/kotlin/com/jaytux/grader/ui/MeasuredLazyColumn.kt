@@ -24,8 +24,8 @@ interface MeasuredLazyItemScope : LazyItemScope {
 }
 
 @Composable
-fun MeasuredLazyColumn(modifier: Modifier = Modifier, content: MeasuredLazyListScope.() -> Unit) {
-    val measuredWidth = remember { mutableStateOf(0.dp) }
+fun MeasuredLazyColumn(modifier: Modifier = Modifier, key: Any? = null, content: MeasuredLazyListScope.() -> Unit) {
+    val measuredWidth = remember(key) { mutableStateOf(0.dp) }
     LazyColumn(modifier.onGloballyPositioned {
         measuredWidth.value = it.size.width.dp
     }) {

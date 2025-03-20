@@ -255,11 +255,11 @@ fun PeerEvaluationView(state: PeerEvaluationState) {
     Column(Modifier.padding(10.dp)) {
         TabRow(idx) {
             contents.forEachIndexed { i, it ->
-                Tab(idx == i, { idx = i }) { Text(it.group.name) }
+                Tab(idx == i, { idx = i; editing = null }) { Text(it.group.name) }
             }
         }
         Spacer(Modifier.height(10.dp))
-        
+
         Row {
             val current = contents[idx]
             val horScroll = rememberLazyListState()
@@ -316,7 +316,7 @@ fun PeerEvaluationView(state: PeerEvaluationState) {
                         item { VLine() }
                     }
                 }
-                MeasuredLazyColumn {
+                MeasuredLazyColumn(key = idx) {
                     measuredItem { HLine() }
                     items(current.students) { (from, glob, map) ->
                         Row(Modifier.height(cellSize)) {
@@ -348,8 +348,9 @@ fun PeerEvaluationView(state: PeerEvaluationState) {
                 editing?.let {
                     Column(Modifier.weight(0.5f)) {
                         val (from, to, data) = it
-                        var sGrade by remember(idx) { mutableStateOf(data?.grade ?: "") }
-                        var sMsg by remember(idx) { mutableStateOf(data?.feedback ?: "") }
+
+                        var sGrade by remember(editing) { mutableStateOf(data?.grade ?: "") }
+                        var sMsg by remember(editing) { mutableStateOf(data?.feedback ?: "") }
 
                         Box(Modifier.padding(5.dp)) {
                             to?.let { s2 ->
@@ -365,7 +366,7 @@ fun PeerEvaluationView(state: PeerEvaluationState) {
                             OutlinedTextField(sGrade, { sGrade = it }, Modifier.weight(0.2f))
                             Spacer(Modifier.weight(0.6f))
                             Button(
-                                { state.upsertIndividualFeedback(from, to, sMsg, sGrade) },
+                                { state.upsertIndividualFeedback(from, to, sGrade, sMsg); editing = null },
                                 Modifier.weight(0.2f).align(Alignment.CenterVertically),
                                 enabled = sGrade.isNotBlank() || sMsg.isNotBlank()
                             ) {
@@ -386,7 +387,7 @@ fun PeerEvaluationView(state: PeerEvaluationState) {
                     Row {
                         Text("Group-level notes", Modifier.weight(1f).align(Alignment.CenterVertically), fontWeight = FontWeight.Bold)
                         Button(
-                            { state.upsertGroupFeedback(current.group, groupLevel) },
+                            { state.upsertGroupFeedback(current.group, groupLevel); editing = null },
                             enabled = groupLevel != contents[idx].content
                         ) { Text("Update") }
                     }

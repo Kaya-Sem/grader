@@ -415,19 +415,22 @@ fun SelectEditDeleteRow(
 
 @Composable
 fun FromTo(size: Dp) {
-    Box(Modifier.width(size).height(size)) {
+    var w by remember { mutableStateOf(0) }
+    var h by remember { mutableStateOf(0) }
+    Box(Modifier.width(size).height(size).onGloballyPositioned {
+        w = it.size.width
+        h = it.size.height
+    }) {
         Box(Modifier.align(Alignment.BottomStart)) {
             Text("Evaluator", fontWeight = FontWeight.Bold)
         }
 
-        Box(
-            Modifier.align(Alignment.TopEnd)
-        ) {
+        Box {
             Text("Evaluated", Modifier.graphicsLayer {
                 rotationZ = -90f
+                translationX = w - 15f
+                translationY = h - 15f
                 transformOrigin = TransformOrigin(0f, 0.5f)
-                translationX = size.value / 2f - 15f
-                translationY = size.value - 15f
             }, fontWeight = FontWeight.Bold)
         }
     }
@@ -442,7 +445,7 @@ fun PEGradeWidget(
 ) = Box(modifier.padding(2.dp)) {
     Selectable(isSelected, onSelect, onDeselect) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(grade?.let { if(it.grade.isNotBlank()) it.grade else if(it.feedback.isNotBlank()) "n/a" else null } ?: "none")
+            Text(grade?.let { if(it.grade.isNotBlank()) it.grade else if(it.feedback.isNotBlank()) "(other)" else null } ?: "none")
         }
     }
 }

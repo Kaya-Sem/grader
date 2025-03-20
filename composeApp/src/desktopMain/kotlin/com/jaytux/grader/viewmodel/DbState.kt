@@ -604,17 +604,17 @@ class PeerEvaluationState(val evaluation: PeerEvaluation) {
     val contents = RawDbState { loadContents() }
 
     private fun Transaction.loadContents(): List<GroupEntry> {
-        val found = PeerEvaluationContents.selectAll().where {
-            PeerEvaluationContents.peerEvaluationId eq evaluation.id
+        val found = (Groups leftJoin PeerEvaluationContents).selectAll().where {
+            Groups.editionId eq evaluation.edition.id
         }.associate { gc ->
-            val group = Group[gc[PeerEvaluationContents.groupId]]
-            val content = gc[PeerEvaluationContents.content]
+            val group = Group[gc[Groups.id]]
+            val content = gc[PeerEvaluationContents.content] ?: ""
             val students = group.students.map { student1 ->
                 val others = group.students.map { student2 ->
                     val eval = StudentToStudentEvaluation.selectAll().where {
                         StudentToStudentEvaluation.peerEvaluationId eq evaluation.id and
-                        (StudentToStudentEvaluation.studentIdTo eq student1.id) and
-                        (StudentToStudentEvaluation.studentIdFrom eq student2.id)
+                        (StudentToStudentEvaluation.studentIdFrom eq student1.id) and
+                        (StudentToStudentEvaluation.studentIdTo eq student2.id)
                     }.firstOrNull()
                     student2 to eval?.let {
                         Student2StudentEntry(
