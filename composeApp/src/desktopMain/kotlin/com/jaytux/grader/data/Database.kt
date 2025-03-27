@@ -11,7 +11,7 @@ object Database {
             SchemaUtils.create(
                 Courses, Editions, Groups,
                 Students, GroupStudents, EditionStudents,
-                GroupAssignments, SoloAssignments,
+                GroupAssignments, SoloAssignments, GroupAssignmentCriteria, SoloAssignmentCriteria,
                 GroupFeedbacks, IndividualFeedbacks, SoloFeedbacks,
                 PeerEvaluations, PeerEvaluationContents, StudentToStudentEvaluation,
                 StudentToGroupEvaluation
@@ -20,7 +20,7 @@ object Database {
             val addMissing = SchemaUtils.addMissingColumnsStatements(
                 Courses, Editions, Groups,
                 Students, GroupStudents, EditionStudents,
-                GroupAssignments, SoloAssignments,
+                GroupAssignments, SoloAssignments, GroupAssignmentCriteria, SoloAssignmentCriteria,
                 GroupFeedbacks, IndividualFeedbacks, SoloFeedbacks,
                 PeerEvaluations, PeerEvaluationContents, StudentToStudentEvaluation,
                 StudentToGroupEvaluation

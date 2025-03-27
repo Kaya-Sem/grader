@@ -48,6 +48,7 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "com.jaytux.grader"
             packageVersion = "1.0.0"
+            includeAllModules = true
         }
     }
 }

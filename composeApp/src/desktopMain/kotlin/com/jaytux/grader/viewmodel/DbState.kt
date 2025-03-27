@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import com.jaytux.grader.data.*
 import com.jaytux.grader.data.EditionStudents.editionId
 import com.jaytux.grader.data.EditionStudents.studentId
+import com.jaytux.grader.viewmodel.GroupAssignmentState.*
 import kotlinx.datetime.*
 import kotlinx.datetime.TimeZone
 import org.jetbrains.exposed.dao.id.EntityID
@@ -445,18 +446,27 @@ class GroupState(val group: Group) {
 }
 
 class GroupAssignmentState(val assignment: GroupAssignment) {
-    data class LocalFeedback(val feedback: String, val grade: String)
+    data class FeedbackEntry(val feedback: String, val grade: String)
+    data class LocalCriterionFeedback(
+        val criterion: GroupAssignmentCriterion, val entry: FeedbackEntry?
+    )
+    data class LocalFeedback(
+        val global: FeedbackEntry?, val byCriterion: List<LocalCriterionFeedback>
+    )
     data class LocalGFeedback(
         val group: Group,
-        val feedback: LocalFeedback?,
-        val individuals: List<Pair<Student, Pair<String?, LocalFeedback?>>>
+        val feedback: LocalFeedback,
+        val individuals: List<Pair<Student, Pair<String?, LocalFeedback>>>
     )
 
     val editionCourse = transaction { assignment.edition.course to assignment.edition }
     private val _name = mutableStateOf(assignment.name); val name = _name.immutable()
     private val _task = mutableStateOf(assignment.assignment); val task = _task.immutable()
-    val feedback = RawDbState { loadFeedback() }
     private val _deadline = mutableStateOf(assignment.deadline); val deadline = _deadline.immutable()
+    val criteria = RawDbState {
+        assignment.criteria.orderBy(GroupAssignmentCriteria.name to SortOrder.ASC).toList()
+    }
+    val feedback = RawDbState { loadFeedback() }
 
     val autofill = RawDbState {
         val forGroups = GroupFeedbacks.selectAll().where { GroupFeedbacks.groupAssignmentId eq assignment.id }.flatMap {
@@ -471,50 +481,63 @@ class GroupAssignmentState(val assignment: GroupAssignment) {
     }
 
     private fun Transaction.loadFeedback(): List<Pair<Group, LocalGFeedback>> {
-        val individuals = IndividualFeedbacks.selectAll().where {
-            IndividualFeedbacks.groupAssignmentId eq assignment.id
-        }.map {
-            it[IndividualFeedbacks.studentId] to LocalFeedback(it[IndividualFeedbacks.feedback], it[IndividualFeedbacks.grade])
-        }.associate { it }
-
-        val groupFeedbacks = GroupFeedbacks.selectAll().where {
-            GroupFeedbacks.groupAssignmentId eq assignment.id
-        }.map {
-            it[GroupFeedbacks.groupId] to (it[GroupFeedbacks.feedback] to it[GroupFeedbacks.grade])
-        }.associate { it }
-
-        val groups = Group.find {
+        return Group.find {
             (Groups.editionId eq assignment.edition.id)
         }.sortAsc(Groups.name).map { group ->
-            val students = group.studentRoles.sortedBy { it.student.name }.map { sR ->
-                val student = sR.student
-                val role = sR.role
-                val feedback = individuals[student.id]
-
-                student to (role to feedback)
+            // step 1: group-level feedback, including criteria
+            val forGroup = GroupFeedbacks.selectAll().where {
+                (GroupFeedbacks.groupAssignmentId eq assignment.id) and
+                        (GroupFeedbacks.groupId eq group.id)
+            }.associate {
+                val criterion = it[GroupFeedbacks.criterionId]?.let { id -> GroupAssignmentCriterion[id] }
+                val fe = FeedbackEntry(it[GroupFeedbacks.feedback], it[GroupFeedbacks.grade])
+                criterion to fe
             }
+            val feedback = LocalFeedback(
+                global = forGroup[null],
+                byCriterion = criteria.entities.value.map { c -> LocalCriterionFeedback(c, forGroup[c]) }
+            )
 
-            groupFeedbacks[group.id]?.let { (f, g) ->
-                group to LocalGFeedback(group, LocalFeedback(f, g), students)
-            } ?: (group to LocalGFeedback(group, null, students))
+            // step 2: individual feedback
+            val individuals = group.studentRoles.map { sr ->
+                val student = sr.student
+                val role = sr.role
+
+                val forStudent = IndividualFeedbacks.selectAll().where {
+                    (IndividualFeedbacks.groupAssignmentId eq assignment.id) and
+                            (IndividualFeedbacks.groupId eq group.id) and
+                            (IndividualFeedbacks.studentId eq student.id)
+                }.associate {
+                    val criterion = it[IndividualFeedbacks.criterionId]?.let { id -> GroupAssignmentCriterion[id] }
+                    val fe = FeedbackEntry(it[IndividualFeedbacks.feedback], it[IndividualFeedbacks.grade])
+                    criterion to fe
+                }
+                val studentFeedback = LocalFeedback(
+                    global = forStudent[null],
+                    byCriterion = criteria.entities.value.map { c -> LocalCriterionFeedback(c, forStudent[c]) }
+                )
+
+                student to (role to studentFeedback)
+            }.sortedBy { it.first.name }
+
+            group to LocalGFeedback(group, feedback, individuals)
         }
-
-        return groups
     }
 
-    fun upsertGroupFeedback(group: Group, msg: String, grd: String) {
+    fun upsertGroupFeedback(group: Group, msg: String, grd: String, criterion: GroupAssignmentCriterion? = null) {
         transaction {
             GroupFeedbacks.upsert {
                 it[groupAssignmentId] = assignment.id
                 it[groupId] = group.id
                 it[this.feedback] = msg
                 it[this.grade] = grd
+                it[criterionId] = criterion?.id
             }
         }
         feedback.refresh(); autofill.refresh()
     }
 
-    fun upsertIndividualFeedback(student: Student, group: Group, msg: String, grd: String) {
+    fun upsertIndividualFeedback(student: Student, group: Group, msg: String, grd: String, criterion: GroupAssignmentCriterion? = null) {
         transaction {
             IndividualFeedbacks.upsert {
                 it[groupAssignmentId] = assignment.id
@@ -522,6 +545,7 @@ class GroupAssignmentState(val assignment: GroupAssignment) {
                 it[studentId] = student.id
                 it[this.feedback] = msg
                 it[this.grade] = grd
+                it[criterionId] = criterion?.id
             }
         }
         feedback.refresh(); autofill.refresh()
@@ -540,16 +564,48 @@ class GroupAssignmentState(val assignment: GroupAssignment) {
         }
         _deadline.value = d
     }
+
+    fun addCriterion(name: String) {
+        transaction {
+            GroupAssignmentCriterion.new {
+                this.name = name;
+                this.description = "";
+                this.assignment = this@GroupAssignmentState.assignment
+            }
+            criteria.refresh()
+        }
+    }
+
+    fun updateCriterion(criterion: GroupAssignmentCriterion, name: String, desc: String) {
+        transaction {
+            criterion.name = name
+            criterion.description = desc
+        }
+        criteria.refresh()
+    }
+
+    fun deleteCriterion(criterion: GroupAssignmentCriterion) {
+        transaction {
+            GroupFeedbacks.deleteWhere { criterionId eq criterion.id }
+            IndividualFeedbacks.deleteWhere { criterionId eq criterion.id }
+            criterion.delete()
+        }
+        criteria.refresh()
+    }
 }
 
 class SoloAssignmentState(val assignment: SoloAssignment) {
     data class LocalFeedback(val feedback: String, val grade: String)
+    data class FullFeedback(val global: LocalFeedback?, val byCriterion: List<Pair<SoloAssignmentCriterion, LocalFeedback?>>)
 
     val editionCourse = transaction { assignment.edition.course to assignment.edition }
     private val _name = mutableStateOf(assignment.name); val name = _name.immutable()
     private val _task = mutableStateOf(assignment.assignment); val task = _task.immutable()
-    val feedback = RawDbState { loadFeedback() }
     private val _deadline = mutableStateOf(assignment.deadline); val deadline = _deadline.immutable()
+    val criteria = RawDbState {
+        assignment.criteria.orderBy(SoloAssignmentCriteria.name to SortOrder.ASC).toList()
+    }
+    val feedback = RawDbState { loadFeedback() }
 
     val autofill = RawDbState {
         SoloFeedbacks.selectAll().where { SoloFeedbacks.soloAssignmentId eq assignment.id }.map {
@@ -557,24 +613,33 @@ class SoloAssignmentState(val assignment: SoloAssignment) {
         }.flatten().distinct().sorted()
     }
 
-    private fun Transaction.loadFeedback(): List<Pair<Student, LocalFeedback?>> {
-        val students = editionCourse.second.soloStudents
-        val feedbacks = SoloFeedbacks.selectAll().where {
-            SoloFeedbacks.soloAssignmentId eq assignment.id
-        }.associate {
-            it[SoloFeedbacks.studentId] to LocalFeedback(it[SoloFeedbacks.feedback], it[SoloFeedbacks.grade])
-        }
+    private fun Transaction.loadFeedback(): List<Pair<Student, FullFeedback>> {
+        return editionCourse.second.soloStudents.sortAsc(Students.name).map { student ->
+            val each = SoloFeedbacks.selectAll().where {
+                (SoloFeedbacks.soloAssignmentId eq assignment.id) and
+                        (SoloFeedbacks.studentId eq student.id)
+            }.associate {
+                val criterion = it[SoloFeedbacks.criterionId]?.let { id -> SoloAssignmentCriterion[id] }
+                val fe = LocalFeedback(it[SoloFeedbacks.feedback], it[SoloFeedbacks.grade])
+                criterion to fe
+            }
+            val feedback = FullFeedback(
+                global = each[null],
+                byCriterion = criteria.entities.value.map { c -> c to each[c] }
+            )
 
-        return students.map { s -> s to feedbacks[s.id] }
+            student to feedback
+        }
     }
 
-    fun upsertFeedback(student: Student, msg: String, grd: String) {
+    fun upsertFeedback(student: Student, msg: String?, grd: String?, criterion: SoloAssignmentCriterion? = null) {
         transaction {
             SoloFeedbacks.upsert {
                 it[soloAssignmentId] = assignment.id
                 it[studentId] = student.id
-                it[this.feedback] = msg
-                it[this.grade] = grd
+                it[this.feedback] = msg ?: ""
+                it[this.grade] = grd ?: ""
+                it[criterionId] = criterion?.id
             }
         }
         feedback.refresh(); autofill.refresh()
@@ -592,6 +657,33 @@ class SoloAssignmentState(val assignment: SoloAssignment) {
             assignment.deadline = d
         }
         _deadline.value = d
+    }
+
+    fun addCriterion(name: String) {
+        transaction {
+            SoloAssignmentCriterion.new {
+                this.name = name;
+                this.description = "";
+                this.assignment = this@SoloAssignmentState.assignment
+            }
+            criteria.refresh()
+        }
+    }
+
+    fun updateCriterion(criterion: SoloAssignmentCriterion, name: String, desc: String) {
+        transaction {
+            criterion.name = name
+            criterion.description = desc
+        }
+        criteria.refresh()
+    }
+
+    fun deleteCriterion(criterion: SoloAssignmentCriterion) {
+        transaction {
+            SoloFeedbacks.deleteWhere { criterionId eq criterion.id }
+            criterion.delete()
+        }
+        criteria.refresh()
     }
 }
 

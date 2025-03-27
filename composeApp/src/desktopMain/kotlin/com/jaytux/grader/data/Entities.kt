@@ -1,10 +1,9 @@
 package com.jaytux.grader.data
 
+import com.jaytux.grader.data.GroupAssignment.Companion.referrersOn
 import org.jetbrains.exposed.dao.Entity
 import org.jetbrains.exposed.dao.EntityClass
-import org.jetbrains.exposed.dao.id.CompositeID
 import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.UUID
 
 class Course(id: EntityID<UUID>) : Entity<UUID>(id) {
@@ -61,6 +60,16 @@ class GroupAssignment(id: EntityID<UUID>) : Entity<UUID>(id) {
     var name by GroupAssignments.name
     var assignment by GroupAssignments.assignment
     var deadline by GroupAssignments.deadline
+
+    val criteria by GroupAssignmentCriterion referrersOn GroupAssignmentCriteria.assignmentId
+}
+
+class GroupAssignmentCriterion(id: EntityID<UUID>) : Entity<UUID>(id) {
+    companion object : EntityClass<UUID, GroupAssignmentCriterion>(GroupAssignmentCriteria)
+
+    var assignment by GroupAssignment referencedOn GroupAssignmentCriteria.assignmentId
+    var name by GroupAssignmentCriteria.name
+    var description by GroupAssignmentCriteria.desc
 }
 
 class SoloAssignment(id: EntityID<UUID>) : Entity<UUID>(id) {
@@ -71,6 +80,35 @@ class SoloAssignment(id: EntityID<UUID>) : Entity<UUID>(id) {
     var name by SoloAssignments.name
     var assignment by SoloAssignments.assignment
     var deadline by SoloAssignments.deadline
+
+    val criteria by SoloAssignmentCriterion referrersOn SoloAssignmentCriteria.assignmentId
+}
+
+class SoloAssignmentCriterion(id: EntityID<UUID>) : Entity<UUID>(id) {
+    companion object : EntityClass<UUID, SoloAssignmentCriterion>(SoloAssignmentCriteria)
+
+    var assignment by SoloAssignment referencedOn SoloAssignmentCriteria.assignmentId
+    var name by SoloAssignmentCriteria.name
+    var description by SoloAssignmentCriteria.desc
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as SoloAssignmentCriterion
+
+        if (name != other.name) return false
+        if (description != other.description) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = assignment.hashCode()
+        result = 31 * result + name.hashCode()
+        result = 31 * result + description.hashCode()
+        return result
+    }
 }
 
 class PeerEvaluation(id: EntityID<UUID>) : Entity<UUID>(id) {

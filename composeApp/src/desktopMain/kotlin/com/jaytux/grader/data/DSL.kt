@@ -1,6 +1,5 @@
 package com.jaytux.grader.data
 
-import kotlinx.datetime.*
 import org.jetbrains.exposed.dao.id.CompositeIdTable
 import org.jetbrains.exposed.dao.id.UUIDTable
 import org.jetbrains.exposed.sql.Table
@@ -59,12 +58,24 @@ object GroupAssignments : UUIDTable("grpAssgmts") {
     val deadline = datetime("deadline")
 }
 
+object GroupAssignmentCriteria : UUIDTable("grpAsCr") {
+    val assignmentId = reference("group_assignment_id", GroupAssignments.id)
+    val name = varchar("name", 50)
+    val desc = text("description")
+}
+
 object SoloAssignments : UUIDTable("soloAssgmts") {
     val editionId = reference("edition_id", Editions.id)
     val number = integer("number").nullable()
     val name = varchar("name", 50)
     val assignment = text("assignment")
     val deadline = datetime("deadline")
+}
+
+object SoloAssignmentCriteria : UUIDTable("soloAsCr") {
+    val assignmentId = reference("solo_assignment_id", SoloAssignments.id)
+    val name = varchar("name", 50)
+    val desc = text("description")
 }
 
 object PeerEvaluations : UUIDTable("peerEvals") {
@@ -75,6 +86,7 @@ object PeerEvaluations : UUIDTable("peerEvals") {
 
 object GroupFeedbacks : CompositeIdTable("grpFdbks") {
     val groupAssignmentId = reference("group_assignment_id", GroupAssignments.id)
+    val criterionId = reference("criterion_id", GroupAssignments.id).nullable()
     val groupId = reference("group_id", Groups.id)
     val feedback = text("feedback")
     val grade = varchar("grade", 32)
@@ -84,6 +96,7 @@ object GroupFeedbacks : CompositeIdTable("grpFdbks") {
 
 object IndividualFeedbacks : CompositeIdTable("indivFdbks") {
     val groupAssignmentId = reference("group_assignment_id", GroupAssignments.id)
+    val criterionId = reference("criterion_id", GroupAssignments.id).nullable()
     val groupId = reference("group_id", Groups.id)
     val studentId = reference("student_id", Students.id)
     val feedback = text("feedback")
@@ -94,6 +107,7 @@ object IndividualFeedbacks : CompositeIdTable("indivFdbks") {
 
 object SoloFeedbacks : CompositeIdTable("soloFdbks") {
     val soloAssignmentId = reference("solo_assignment_id", SoloAssignments.id)
+    val criterionId = reference("criterion_id", SoloAssignments.id).nullable()
     val studentId = reference("student_id", Students.id)
     val feedback = text("feedback")
     val grade = varchar("grade", 32)
