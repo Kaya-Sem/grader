@@ -70,6 +70,24 @@ class GroupAssignmentCriterion(id: EntityID<UUID>) : Entity<UUID>(id) {
     var assignment by GroupAssignment referencedOn GroupAssignmentCriteria.assignmentId
     var name by GroupAssignmentCriteria.name
     var description by GroupAssignmentCriteria.desc
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as GroupAssignmentCriterion
+
+        if (name != other.name) return false
+        if (description != other.description) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = name.hashCode()
+        result = 31 * result + description.hashCode()
+        return result
+    }
 }
 
 class SoloAssignment(id: EntityID<UUID>) : Entity<UUID>(id) {
@@ -104,8 +122,7 @@ class SoloAssignmentCriterion(id: EntityID<UUID>) : Entity<UUID>(id) {
     }
 
     override fun hashCode(): Int {
-        var result = assignment.hashCode()
-        result = 31 * result + name.hashCode()
+        var result = name.hashCode()
         result = 31 * result + description.hashCode()
         return result
     }

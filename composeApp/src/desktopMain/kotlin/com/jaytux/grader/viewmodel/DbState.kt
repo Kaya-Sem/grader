@@ -310,15 +310,23 @@ class EditionState(val edition: Edition) {
     }
     fun delete(sa: SoloAssignment) {
         transaction {
-            SoloFeedbacks.deleteWhere { soloAssignmentId eq sa.id }
+            SoloAssignmentCriteria.selectAll().where { SoloAssignmentCriteria.assignmentId eq sa.id }.forEach { it ->
+                val id = it[SoloAssignmentCriteria.assignmentId]
+                SoloFeedbacks.deleteWhere { criterionId eq id }
+            }
+            SoloAssignmentCriteria.deleteWhere { assignmentId eq sa.id }
             sa.delete()
         }
         solo.refresh()
     }
     fun delete(ga: GroupAssignment) {
         transaction {
-            GroupFeedbacks.deleteWhere { groupAssignmentId eq ga.id }
-            IndividualFeedbacks.deleteWhere { groupAssignmentId eq ga.id }
+            GroupAssignmentCriteria.selectAll().where { GroupAssignmentCriteria.assignmentId eq ga.id }.forEach { it ->
+                val id = it[GroupAssignmentCriteria.assignmentId]
+                GroupFeedbacks.deleteWhere { criterionId eq id }
+                IndividualFeedbacks.deleteWhere { criterionId eq id }
+            }
+            GroupAssignmentCriteria.deleteWhere { assignmentId eq ga.id }
             ga.delete()
         }
         groupAs.refresh()
@@ -363,13 +371,15 @@ class StudentState(val student: Student, edition: Edition) {
             (Groups.editionId eq edition.id) and (Groups.id inList student.groups.map { it.id })
         }.associate { it.id to it.name }
 
-        val asGroup = (GroupAssignments innerJoin GroupFeedbacks innerJoin Groups).selectAll().where {
-            GroupFeedbacks.groupId inList groupsForEdition.keys.toList()
-        }.map { it[GroupFeedbacks.groupAssignmentId] to it }
+        val asGroup = (GroupAssignments innerJoin GroupAssignmentCriteria innerJoin GroupFeedbacks innerJoin Groups).selectAll().where {
+            (GroupFeedbacks.groupId inList groupsForEdition.keys.toList()) and
+                    (GroupAssignmentCriteria.name eq "")
+        }.map { it[GroupAssignments.id] to it }
 
-        val asIndividual = (GroupAssignments innerJoin IndividualFeedbacks innerJoin Groups).selectAll().where {
-            IndividualFeedbacks.studentId eq student.id
-        }.map { it[IndividualFeedbacks.groupAssignmentId] to it }
+        val asIndividual = (GroupAssignments innerJoin GroupAssignmentCriteria innerJoin IndividualFeedbacks innerJoin Groups).selectAll().where {
+            (IndividualFeedbacks.studentId eq student.id) and
+                    (GroupAssignmentCriteria.name eq "")
+        }.map { it[GroupAssignments.id] to it }
 
         val res = mutableMapOf<EntityID<UUID>, LocalGroupGrade>()
         asGroup.forEach {
@@ -391,8 +401,9 @@ class StudentState(val student: Student, edition: Edition) {
     }
 
     val soloGrades = RawDbState {
-        (SoloAssignments innerJoin SoloFeedbacks).selectAll().where {
-            SoloFeedbacks.studentId eq student.id
+        (SoloAssignments innerJoin SoloAssignmentCriteria innerJoin SoloFeedbacks).selectAll().where {
+            (SoloFeedbacks.studentId eq student.id) and
+                (SoloAssignmentCriteria.name eq "")
         }.map { LocalSoloGrade(it[SoloAssignments.name], it[SoloFeedbacks.grade]) }.toList()
     }
 
@@ -456,7 +467,7 @@ class GroupAssignmentState(val assignment: GroupAssignment) {
     data class LocalGFeedback(
         val group: Group,
         val feedback: LocalFeedback,
-        val individuals: List<Pair<Student, Pair<String?, LocalFeedback>>>
+        val individuals: List<Pair<Student, Pair<String?, LocalFeedback>>> // Student -> (Role, Feedback)
     )
 
     val editionCourse = transaction { assignment.edition.course to assignment.edition }
@@ -469,11 +480,11 @@ class GroupAssignmentState(val assignment: GroupAssignment) {
     val feedback = RawDbState { loadFeedback() }
 
     val autofill = RawDbState {
-        val forGroups = GroupFeedbacks.selectAll().where { GroupFeedbacks.groupAssignmentId eq assignment.id }.flatMap {
+        val forGroups = (GroupFeedbacks innerJoin GroupAssignmentCriteria).selectAll().where { GroupAssignmentCriteria.assignmentId eq assignment.id }.flatMap {
             it[GroupFeedbacks.feedback].split('\n')
         }
 
-        val forIndividuals = IndividualFeedbacks.selectAll().where { IndividualFeedbacks.groupAssignmentId eq assignment.id }.flatMap {
+        val forIndividuals = (IndividualFeedbacks innerJoin GroupAssignmentCriteria).selectAll().where { GroupAssignmentCriteria.assignmentId eq assignment.id }.flatMap {
             it[IndividualFeedbacks.feedback].split('\n')
         }
 
@@ -481,53 +492,67 @@ class GroupAssignmentState(val assignment: GroupAssignment) {
     }
 
     private fun Transaction.loadFeedback(): List<Pair<Group, LocalGFeedback>> {
+        val allCrit = GroupAssignmentCriterion.find {
+            GroupAssignmentCriteria.assignmentId eq assignment.id
+        }
+
         return Group.find {
             (Groups.editionId eq assignment.edition.id)
         }.sortAsc(Groups.name).map { group ->
-            // step 1: group-level feedback, including criteria
-            val forGroup = GroupFeedbacks.selectAll().where {
-                (GroupFeedbacks.groupAssignmentId eq assignment.id) and
-                        (GroupFeedbacks.groupId eq group.id)
-            }.associate {
-                val criterion = it[GroupFeedbacks.criterionId]?.let { id -> GroupAssignmentCriterion[id] }
-                val fe = FeedbackEntry(it[GroupFeedbacks.feedback], it[GroupFeedbacks.grade])
-                criterion to fe
+            val forGroup = (GroupFeedbacks innerJoin Groups).selectAll().where {
+                (GroupFeedbacks.assignmentId eq assignment.id) and (Groups.id eq group.id)
+            }.map { row ->
+                val crit = row[GroupFeedbacks.criterionId]?.let { GroupAssignmentCriterion[it] }
+                val fdbk = row[GroupFeedbacks.feedback]
+                val grade = row[GroupFeedbacks.grade]
+
+                crit to FeedbackEntry(fdbk, grade)
             }
-            val feedback = LocalFeedback(
-                global = forGroup[null],
-                byCriterion = criteria.entities.value.map { c -> LocalCriterionFeedback(c, forGroup[c]) }
-            )
 
-            // step 2: individual feedback
-            val individuals = group.studentRoles.map { sr ->
-                val student = sr.student
-                val role = sr.role
+            val global = forGroup.firstOrNull { it.first == null }?.second
+            val byCrit_ = forGroup.map { it.first?.let { k -> LocalCriterionFeedback(k, it.second) } }
+                .filterNotNull().associateBy { it.criterion.id }
+            val byCrit = allCrit.map { c ->
+                byCrit_[c.id] ?: LocalCriterionFeedback(c, null)
+            }
 
-                val forStudent = IndividualFeedbacks.selectAll().where {
-                    (IndividualFeedbacks.groupAssignmentId eq assignment.id) and
-                            (IndividualFeedbacks.groupId eq group.id) and
-                            (IndividualFeedbacks.studentId eq student.id)
-                }.associate {
-                    val criterion = it[IndividualFeedbacks.criterionId]?.let { id -> GroupAssignmentCriterion[id] }
-                    val fe = FeedbackEntry(it[IndividualFeedbacks.feedback], it[IndividualFeedbacks.grade])
-                    criterion to fe
+            val byGroup = LocalFeedback(global, byCrit)
+
+            val indiv = group.studentRoles.map {
+                val student = it.student
+                val role = it.role
+
+                val forSt = (IndividualFeedbacks innerJoin Groups innerJoin GroupStudents)
+                    .selectAll().where {
+                        (IndividualFeedbacks.assignmentId eq assignment.id) and
+                                (GroupStudents.studentId eq student.id) and (Groups.id eq group.id)
+                    }.map { row ->
+                        val crit = row[IndividualFeedbacks.criterionId]?.let { id -> GroupAssignmentCriterion[id] }
+                        val fdbk = row[IndividualFeedbacks.feedback]
+                        val grade = row[IndividualFeedbacks.grade]
+
+                        crit to FeedbackEntry(fdbk, grade)
+                    }
+
+                val global = forSt.firstOrNull { it.first == null }?.second
+                val byCrit_ = forSt.map { it.first?.let { k -> LocalCriterionFeedback(k, it.second) } }
+                    .filterNotNull().associateBy { it.criterion.id }
+                val byCrit = allCrit.map { c ->
+                    byCrit_[c.id] ?: LocalCriterionFeedback(c, null)
                 }
-                val studentFeedback = LocalFeedback(
-                    global = forStudent[null],
-                    byCriterion = criteria.entities.value.map { c -> LocalCriterionFeedback(c, forStudent[c]) }
-                )
+                val byStudent = LocalFeedback(global, byCrit)
 
-                student to (role to studentFeedback)
-            }.sortedBy { it.first.name }
+                student to (role to byStudent)
+            }
 
-            group to LocalGFeedback(group, feedback, individuals)
+            group to LocalGFeedback(group, byGroup, indiv)
         }
     }
 
     fun upsertGroupFeedback(group: Group, msg: String, grd: String, criterion: GroupAssignmentCriterion? = null) {
         transaction {
             GroupFeedbacks.upsert {
-                it[groupAssignmentId] = assignment.id
+                it[assignmentId] = assignment.id
                 it[groupId] = group.id
                 it[this.feedback] = msg
                 it[this.grade] = grd
@@ -540,7 +565,7 @@ class GroupAssignmentState(val assignment: GroupAssignment) {
     fun upsertIndividualFeedback(student: Student, group: Group, msg: String, grd: String, criterion: GroupAssignmentCriterion? = null) {
         transaction {
             IndividualFeedbacks.upsert {
-                it[groupAssignmentId] = assignment.id
+                it[assignmentId] = assignment.id
                 it[groupId] = group.id
                 it[studentId] = student.id
                 it[this.feedback] = msg
@@ -608,34 +633,42 @@ class SoloAssignmentState(val assignment: SoloAssignment) {
     val feedback = RawDbState { loadFeedback() }
 
     val autofill = RawDbState {
-        SoloFeedbacks.selectAll().where { SoloFeedbacks.soloAssignmentId eq assignment.id }.map {
+        SoloFeedbacks.selectAll().where { SoloFeedbacks.assignmentId eq assignment.id }.map {
             it[SoloFeedbacks.feedback].split('\n')
         }.flatten().distinct().sorted()
     }
 
     private fun Transaction.loadFeedback(): List<Pair<Student, FullFeedback>> {
-        return editionCourse.second.soloStudents.sortAsc(Students.name).map { student ->
-            val each = SoloFeedbacks.selectAll().where {
-                (SoloFeedbacks.soloAssignmentId eq assignment.id) and
-                        (SoloFeedbacks.studentId eq student.id)
-            }.associate {
-                val criterion = it[SoloFeedbacks.criterionId]?.let { id -> SoloAssignmentCriterion[id] }
-                val fe = LocalFeedback(it[SoloFeedbacks.feedback], it[SoloFeedbacks.grade])
-                criterion to fe
-            }
-            val feedback = FullFeedback(
-                global = each[null],
-                byCriterion = criteria.entities.value.map { c -> c to each[c] }
-            )
+        val allCrit = SoloAssignmentCriterion.find {
+            SoloAssignmentCriteria.assignmentId eq assignment.id
+        }
 
-            student to feedback
+        return editionCourse.second.soloStudents.sortAsc(Students.name).map { student ->
+            val forStudent = (IndividualFeedbacks innerJoin Students).selectAll().where {
+                (IndividualFeedbacks.assignmentId eq assignment.id) and (Students.id eq student.id)
+            }.map { row ->
+                val crit = row[IndividualFeedbacks.criterionId]?.let { SoloAssignmentCriterion[it] }
+                val fdbk = row[IndividualFeedbacks.feedback]
+                val grade = row[IndividualFeedbacks.grade]
+
+                crit to LocalFeedback(fdbk, grade)
+            }
+
+            val global = forStudent.firstOrNull { it.first == null }?.second
+            val byCrit_ = forStudent.map { it.first?.let { k -> Pair(k, it.second) } }
+                .filterNotNull().associateBy { it.first.id }
+            val byCrit = allCrit.map { c ->
+                byCrit_[c.id] ?: Pair(c, null)
+            }
+
+            student to FullFeedback(global, byCrit)
         }
     }
 
     fun upsertFeedback(student: Student, msg: String?, grd: String?, criterion: SoloAssignmentCriterion? = null) {
         transaction {
             SoloFeedbacks.upsert {
-                it[soloAssignmentId] = assignment.id
+                it[assignmentId] = assignment.id
                 it[studentId] = student.id
                 it[this.feedback] = msg ?: ""
                 it[this.grade] = grd ?: ""

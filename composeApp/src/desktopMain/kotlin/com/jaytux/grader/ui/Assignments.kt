@@ -255,7 +255,8 @@ fun groupFeedback(state: GroupAssignmentState, fdbk: GroupAssignmentState.LocalG
         groupFeedbackPane(
             criteria, critIdx, { critIdx = it }, feedback.global,
             if(critIdx == 0) feedback.global else feedback.byCriterion[critIdx - 1].entry,
-            suggestions, updateGrade, updateFeedback, Modifier.weight(0.75f).padding(10.dp)
+            suggestions, updateGrade, updateFeedback, Modifier.weight(0.75f).padding(10.dp),
+            key = idx to critIdx
         )
     }
 }
@@ -270,10 +271,11 @@ fun groupFeedbackPane(
     autofill: List<String>,
     onSetGrade: (String) -> Unit,
     onSetFeedback: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    key: Any? = null
 ) {
-    var grade by remember(globFeedback) { mutableStateOf(globFeedback?.grade ?: "") }
-    var feedback by remember(currentCriterion, criteria) { mutableStateOf(TextFieldValue(criterionFeedback?.feedback ?: "")) }
+    var grade by remember(globFeedback, key) { mutableStateOf(globFeedback?.grade ?: "") }
+    var feedback by remember(currentCriterion, criteria, criterionFeedback, key) { mutableStateOf(TextFieldValue(criterionFeedback?.feedback ?: "")) }
     Column(modifier) {
         Row {
             Text("Overall grade: ", Modifier.align(Alignment.CenterVertically))

@@ -85,34 +85,34 @@ object PeerEvaluations : UUIDTable("peerEvals") {
 }
 
 object GroupFeedbacks : CompositeIdTable("grpFdbks") {
-    val groupAssignmentId = reference("group_assignment_id", GroupAssignments.id)
-    val criterionId = reference("criterion_id", GroupAssignments.id).nullable()
+    val assignmentId = reference("group_assignment_id", GroupAssignments.id)
+    val criterionId = reference("criterion_id", GroupAssignmentCriteria.id).nullable()
     val groupId = reference("group_id", Groups.id)
     val feedback = text("feedback")
     val grade = varchar("grade", 32)
 
-    override val primaryKey = PrimaryKey(groupAssignmentId, groupId)
+    override val primaryKey = PrimaryKey(groupId, criterionId)
 }
 
 object IndividualFeedbacks : CompositeIdTable("indivFdbks") {
-    val groupAssignmentId = reference("group_assignment_id", GroupAssignments.id)
-    val criterionId = reference("criterion_id", GroupAssignments.id).nullable()
+    val assignmentId = reference("group_assignment_id", GroupAssignments.id)
+    val criterionId = reference("criterion_id", GroupAssignmentCriteria.id).nullable()
     val groupId = reference("group_id", Groups.id)
     val studentId = reference("student_id", Students.id)
     val feedback = text("feedback")
     val grade = varchar("grade", 32)
 
-    override val primaryKey = PrimaryKey(groupAssignmentId, studentId)
+    override val primaryKey = PrimaryKey(studentId, criterionId)
 }
 
 object SoloFeedbacks : CompositeIdTable("soloFdbks") {
-    val soloAssignmentId = reference("solo_assignment_id", SoloAssignments.id)
-    val criterionId = reference("criterion_id", SoloAssignments.id).nullable()
+    val assignmentId = reference("solo_assignment_id", SoloAssignments.id)
+    val criterionId = reference("criterion_id", SoloAssignmentCriteria.id).nullable()
     val studentId = reference("student_id", Students.id)
     val feedback = text("feedback")
     val grade = varchar("grade", 32)
 
-    override val primaryKey = PrimaryKey(soloAssignmentId, studentId)
+    override val primaryKey = PrimaryKey(studentId, criterionId)
 }
 
 object PeerEvaluationContents : CompositeIdTable("peerEvalCnts") {
