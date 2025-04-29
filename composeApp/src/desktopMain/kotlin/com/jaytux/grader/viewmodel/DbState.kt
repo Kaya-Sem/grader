@@ -730,7 +730,8 @@ class PeerEvaluationState(val evaluation: PeerEvaluation) {
 
     private fun Transaction.loadContents(): List<GroupEntry> {
         val found = (Groups leftJoin PeerEvaluationContents).selectAll().where {
-            Groups.editionId eq evaluation.edition.id
+            (Groups.editionId eq evaluation.edition.id) and
+                    (PeerEvaluationContents.peerEvaluationId eq evaluation.id)
         }.associate { gc ->
             val group = Group[gc[Groups.id]]
             val content = gc[PeerEvaluationContents.content] ?: ""
@@ -799,22 +800,3 @@ class PeerEvaluationState(val evaluation: PeerEvaluation) {
         contents.refresh()
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
