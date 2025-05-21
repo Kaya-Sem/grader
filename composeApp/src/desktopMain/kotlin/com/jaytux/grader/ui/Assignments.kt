@@ -520,6 +520,11 @@ fun PeerEvaluationView(state: PeerEvaluationState) {
     }
 
     Column(Modifier.padding(10.dp)) {
+        if (contents.isEmpty()) {
+            Text("No groups available for peer evaluation")
+            return@Column
+        }
+
         TabRow(idx) {
             contents.forEachIndexed { i, it ->
                 Tab(idx == i, { idx = i; editing = null }) { Text(it.group.name) }
@@ -527,150 +532,151 @@ fun PeerEvaluationView(state: PeerEvaluationState) {
         }
         Spacer(Modifier.height(10.dp))
 
-        if (contents.isNotEmpty()) {
-            Row {
-                val current = contents[idx]
-                val horScroll = rememberLazyListState()
-                val style = LocalTextStyle.current
-                val textLenMeasured = remember(state, idx) {
-                    current.students.maxOf { (s, _) ->
-                        measure.measure(s.name, style).size.width
-                    } + 10
-                }
-                val cellSize = 75.dp
+        val current = contents[idx]
+        if (current.students.isEmpty()) {
+            Text("This group has no students. Please add students to the group first.")
+            return@Column
+        }
 
-                Column(Modifier.weight(0.5f)) {
-                    Row {
-                        Box { FromTo(textLenMeasured.dp) }
-                        LazyRow(Modifier.height(textLenMeasured.dp), state = horScroll) {
-                            item { VLine() }
-                            items(current.students) { (s, _) ->
-                                Box(
-                                    Modifier.width(cellSize).height(textLenMeasured.dp),
-                                    contentAlignment = Alignment.TopCenter
-                                ) {
-                                    var _h: Int = 0
-                                    Text(s.name, Modifier.layout{ m, c ->
-                                        val p = m.measure(c.copy(minWidth = c.maxWidth, maxWidth = Constraints.Infinity))
-                                        _h = p.height
-                                        layout(p.height, p.width) { p.place(0, 0) }
-                                    }.graphicsLayer {
-                                        rotationZ = -90f
-                                        transformOrigin = TransformOrigin(0f, 0.5f)
-                                        translationX = _h.toFloat() / 2f
-                                        translationY = textLenMeasured.dp.value - 15f
-                                    })
-                                }
-                            }
-                            item { VLine() }
-                            item {
-                                Box(
-                                    Modifier.width(cellSize).height(textLenMeasured.dp),
-                                    contentAlignment = Alignment.TopCenter
-                                ) {
-                                    var _h: Int = 0
-                                    Text("Group Rating", Modifier.layout{ m, c ->
-                                        val p = m.measure(c.copy(minWidth = c.maxWidth, maxWidth = Constraints.Infinity))
-                                        _h = p.height
-                                        layout(p.height, p.width) { p.place(0, 0) }
-                                    }.graphicsLayer {
-                                        rotationZ = -90f
-                                        transformOrigin = TransformOrigin(0f, 0.5f)
-                                        translationX = _h.toFloat() / 2f
-                                        translationY = textLenMeasured.dp.value - 15f
-                                    }, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                            item { VLine() }
-                        }
-                    }
-                    MeasuredLazyColumn(key = idx) {
-                        measuredItem { HLine() }
-                        items(current.students) { (from, glob, map) ->
-                            Row(Modifier.height(cellSize)) {
-                                Text(from.name, Modifier.width(textLenMeasured.dp).align(Alignment.CenterVertically))
-                                LazyRow(state = horScroll) {
-                                    item { VLine() }
-                                    items(map) { (to, entry) ->
-                                        PEGradeWidget(entry,
-                                            { editing = Triple(from, to, entry) }, { editing = null },
-                                            isSelected(from, to), Modifier.size(cellSize, cellSize)
-                                        )
-                                    }
-                                    item { VLine() }
-                                    item {
-                                        PEGradeWidget(glob,
-                                            { editing = Triple(from, null, glob) }, { editing = null },
-                                            isSelected(from, null), Modifier.size(cellSize, cellSize))
-                                    }
-                                    item { VLine() }
-                                }
+        Row {
+            val horScroll = rememberLazyListState()
+            val style = LocalTextStyle.current
+            val textLenMeasured = remember(state, idx) {
+                current.students.maxOfOrNull { (s, _) ->
+                    measure.measure(s.name, style).size.width
+                }?.plus(10) ?: 100
+            }
+            val cellSize = 75.dp
+
+            Column(Modifier.weight(0.5f)) {
+                Row {
+                    Box { FromTo(textLenMeasured.dp) }
+                    LazyRow(Modifier.height(textLenMeasured.dp), state = horScroll) {
+                        item { VLine() }
+                        items(current.students) { (s, _) ->
+                            Box(
+                                Modifier.width(cellSize).height(textLenMeasured.dp),
+                                contentAlignment = Alignment.TopCenter
+                            ) {
+                                var _h: Int = 0
+                                Text(s.name, Modifier.layout{ m, c ->
+                                    val p = m.measure(c.copy(minWidth = c.maxWidth, maxWidth = Constraints.Infinity))
+                                    _h = p.height
+                                    layout(p.height, p.width) { p.place(0, 0) }
+                                }.graphicsLayer {
+                                    rotationZ = -90f
+                                    transformOrigin = TransformOrigin(0f, 0.5f)
+                                    translationX = _h.toFloat() / 2f
+                                    translationY = textLenMeasured.dp.value - 15f
+                                })
                             }
                         }
-                        measuredItem { HLine() }
+                        item { VLine() }
+                        item {
+                            Box(
+                                Modifier.width(cellSize).height(textLenMeasured.dp),
+                                contentAlignment = Alignment.TopCenter
+                            ) {
+                                var _h: Int = 0
+                                Text("Group Rating", Modifier.layout{ m, c ->
+                                    val p = m.measure(c.copy(minWidth = c.maxWidth, maxWidth = Constraints.Infinity))
+                                    _h = p.height
+                                    layout(p.height, p.width) { p.place(0, 0) }
+                                }.graphicsLayer {
+                                    rotationZ = -90f
+                                    transformOrigin = TransformOrigin(0f, 0.5f)
+                                    translationX = _h.toFloat() / 2f
+                                    translationY = textLenMeasured.dp.value - 15f
+                                }, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        item { VLine() }
                     }
                 }
-
-                Column(Modifier.weight(0.5f)) {
-                    var groupLevel by remember(state, idx) { mutableStateOf(contents[idx].content) }
-                    editing?.let {
-                        Column(Modifier.weight(0.5f)) {
-                            val (from, to, data) = it
-
-                            var sGrade by remember(editing) { mutableStateOf(data?.grade ?: "") }
-                            var sMsg by remember(editing) { mutableStateOf(data?.feedback ?: "") }
-
-                            Box(Modifier.padding(5.dp)) {
-                                to?.let { s2 ->
-                                    if(from == s2)
-                                        Text("Self-evaluation by ${from.name}", fontWeight = FontWeight.Bold)
-                                    else
-                                        Text("Evaluation of ${s2.name} by ${from.name}", fontWeight = FontWeight.Bold)
-                                } ?: Text("Group-level evaluation by ${from.name}", fontWeight = FontWeight.Bold)
-                            }
-
-                            Row {
-                                Text("Grade: ", Modifier.align(Alignment.CenterVertically))
-                                OutlinedTextField(sGrade, { sGrade = it }, Modifier.weight(0.2f))
-                                Spacer(Modifier.weight(0.6f))
-                                Button(
-                                    { state.upsertIndividualFeedback(from, to, sGrade, sMsg); editing = null },
-                                    Modifier.weight(0.2f).align(Alignment.CenterVertically),
-                                    enabled = sGrade.isNotBlank() || sMsg.isNotBlank()
-                                ) {
-                                    Text("Save")
+                MeasuredLazyColumn(key = idx) {
+                    measuredItem { HLine() }
+                    items(current.students) { (from, glob, map) ->
+                        Row(Modifier.height(cellSize)) {
+                            Text(from.name, Modifier.width(textLenMeasured.dp).align(Alignment.CenterVertically))
+                            LazyRow(state = horScroll) {
+                                item { VLine() }
+                                items(map) { (to, entry) ->
+                                    PEGradeWidget(entry,
+                                        { editing = Triple(from, to, entry) }, { editing = null },
+                                        isSelected(from, to), Modifier.size(cellSize, cellSize)
+                                    )
                                 }
+                                item { VLine() }
+                                item {
+                                    PEGradeWidget(glob,
+                                        { editing = Triple(from, null, glob) }, { editing = null },
+                                        isSelected(from, null), Modifier.size(cellSize, cellSize))
+                                }
+                                item { VLine() }
                             }
-
-                            OutlinedTextField(
-                                sMsg, { sMsg = it }, Modifier.fillMaxWidth().weight(1f),
-                                label = { Text("Feedback") },
-                                singleLine = false,
-                                minLines = 5
-                            )
                         }
                     }
+                    measuredItem { HLine() }
+                }
+            }
 
+            Column(Modifier.weight(0.5f)) {
+                var groupLevel by remember(state, idx) { mutableStateOf(contents[idx].content) }
+                editing?.let {
                     Column(Modifier.weight(0.5f)) {
+                        val (from, to, data) = it
+
+                        var sGrade by remember(editing) { mutableStateOf(data?.grade ?: "") }
+                        var sMsg by remember(editing) { mutableStateOf(data?.feedback ?: "") }
+
+                        Box(Modifier.padding(5.dp)) {
+                            to?.let { s2 ->
+                                if(from == s2)
+                                    Text("Self-evaluation by ${from.name}", fontWeight = FontWeight.Bold)
+                                else
+                                    Text("Evaluation of ${s2.name} by ${from.name}", fontWeight = FontWeight.Bold)
+                            } ?: Text("Group-level evaluation by ${from.name}", fontWeight = FontWeight.Bold)
+                        }
+
                         Row {
-                            Text("Group-level notes", Modifier.weight(1f).align(Alignment.CenterVertically), fontWeight = FontWeight.Bold)
+                            Text("Grade: ", Modifier.align(Alignment.CenterVertically))
+                            OutlinedTextField(sGrade, { sGrade = it }, Modifier.weight(0.2f))
+                            Spacer(Modifier.weight(0.6f))
                             Button(
-                                { state.upsertGroupFeedback(current.group, groupLevel); editing = null },
-                                enabled = groupLevel != contents[idx].content
-                            ) { Text("Update") }
+                                { state.upsertIndividualFeedback(from, to, sGrade, sMsg); editing = null },
+                                Modifier.weight(0.2f).align(Alignment.CenterVertically),
+                                enabled = sGrade.isNotBlank() || sMsg.isNotBlank()
+                            ) {
+                                Text("Save")
+                            }
                         }
 
                         OutlinedTextField(
-                            groupLevel, { groupLevel = it }, Modifier.fillMaxWidth().weight(1f),
-                            label = { Text("Group-level notes") },
+                            sMsg, { sMsg = it }, Modifier.fillMaxWidth().weight(1f),
+                            label = { Text("Feedback") },
                             singleLine = false,
                             minLines = 5
                         )
                     }
                 }
+
+                Column(Modifier.weight(0.5f)) {
+                    Row {
+                        Text("Group-level notes", Modifier.weight(1f).align(Alignment.CenterVertically), fontWeight = FontWeight.Bold)
+                        Button(
+                            { state.upsertGroupFeedback(current.group, groupLevel); editing = null },
+                            enabled = groupLevel != contents[idx].content
+                        ) { Text("Update") }
+                    }
+
+                    OutlinedTextField(
+                        groupLevel, { groupLevel = it }, Modifier.fillMaxWidth().weight(1f),
+                        label = { Text("Group-level notes") },
+                        singleLine = false,
+                        minLines = 5
+                    )
+                }
             }
-        } else {
-            Text("Add atleast one group with a non-zero amount of students")
         }
     }
 }
