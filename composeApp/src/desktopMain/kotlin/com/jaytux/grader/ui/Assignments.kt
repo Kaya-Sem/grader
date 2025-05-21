@@ -1,4 +1,3 @@
-
 package com.jaytux.grader.ui
 
 import androidx.compose.foundation.clickable
@@ -671,7 +670,7 @@ fun PeerEvaluationView(state: PeerEvaluationState) {
                 }
             }
         } else {
-            Text("No peer evaluation contents available.")
+            Text("Add atleast one group with a non-zero amount of students")
         }
     }
 }
